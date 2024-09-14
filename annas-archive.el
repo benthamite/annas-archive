@@ -73,7 +73,7 @@ time being."
   "Whether to use fast download links from Anna’s Archive.
 If t, use fast download links available to paying members."
   :type 'boolean
-  :group ''annas-archive)
+  :group 'annas-archive)
 
 ;;;; Functions
 
