@@ -51,10 +51,10 @@
   "Rudimentary integration for Anna’s Archive."
   :group 'eww)
 
-(defcustom annas-archive-downloads-dir
-  (expand-file-name "~/Downloads/")
-  "Directory where files downloaded from Anna’s Archive are saved."
-  :type 'directory
+(defcustom annas-archive-use-fast-download-links t
+  "Whether to use fast download links from Anna’s Archive.
+If t, use fast download links available to paying members."
+  :type 'boolean
   :group 'annas-archive)
 
 (defcustom annas-archive-use-eww nil
@@ -69,10 +69,11 @@ time being."
   :type 'boolean
   :group 'annas-archive)
 
-(defcustom annas-archive-use-fast-download-links t
-  "Whether to use fast download links from Anna’s Archive.
-If t, use fast download links available to paying members."
-  :type 'boolean
+(defcustom annas-archive-downloads-dir
+  (expand-file-name "~/Downloads/")
+  "Directory where files downloaded from Anna’s Archive are saved.
+This user option is only relevant when `annas-archive-use-eww' is non-nil."
+  :type 'directory
   :group 'annas-archive)
 
 ;;;; Functions
