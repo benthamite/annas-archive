@@ -42,8 +42,6 @@ If you use the [straight](https://github.com/radian-software/straight.el) packag
 
 ## Configuration
 
-- `annas-archive-downloads-dir`: The directory where the downloaded files will be saved. Default is `~/Downloads/`.
-
 - `annas-archive-use-fast-download-links`: If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.org/donate) is required.
 
 ## Usage
