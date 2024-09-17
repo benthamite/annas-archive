@@ -49,7 +49,7 @@
 
 (defgroup annas-archive ()
   "Rudimentary integration for Anna’s Archive."
-  :group 'eww)
+  :group 'emacs)
 
 (defcustom annas-archive-use-fast-download-links t
   "Whether to use fast download links from Anna’s Archive.
