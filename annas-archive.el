@@ -217,7 +217,8 @@ FILE is the file to attach and KEY is the BibTeX key of the associated entry."
 
 (defun annas-archive-authenticate ()
   "Authenticate with Anna’s Archive.
-Note that as of 2024-07-13 this does not appear to be working."
+Note that as of 2024-07-13 this does not appear to be working. See the docstring
+of the user option `annas-archive-use-eww' for more information."
   (interactive)
   (save-window-excursion
     (add-hook 'eww-after-render-hook #'annas-archive-get-authentication-details)
