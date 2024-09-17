@@ -139,6 +139,7 @@ function was called, if any."
 	(goto-char (max end (1+ (point)))))  ;; ensure progress by moving at least one character forward
       (nreverse candidates))))
 
+(declare-function browse-url-default-browser "browse-url")
 (defun annas-archive-proceed-to-download-page ()
   "Proceed to the Anna’s Archive download page."
   (remove-hook 'eww-after-render-hook #'annas-archive-proceed-to-download-page)
