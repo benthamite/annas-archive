@@ -34,9 +34,6 @@
 (defvar annas-archive-callback nil
   "Callback function to run by `annas-archive-download-file'.")
 
-(defvar annas-archive-bibtex-key nil
-  "BibTeX key of the book being downloaded.")
-
 (defconst annas-archive-home-url
   "https://annas-archive.org/"
   "URL to Anna’s Archive.")
