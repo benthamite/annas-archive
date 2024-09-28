@@ -75,6 +75,7 @@ This user option is only relevant when `annas-archive-use-eww' is non-nil."
 
 ;;;; Functions
 
+;;;###autoload
 (defun annas-archive-download (&optional string confirm callback)
   "Search Anna’s Archive for STRING and download the selected item.
 If STRING is nil, prompt for a search string. If both STRING and CONFIRM are
@@ -213,6 +214,7 @@ FILE is the file to attach and KEY is the BibTeX key of the associated entry."
 
 ;;;;; Authentication
 
+;;;###autoload
 (defun annas-archive-authenticate ()
   "Authenticate with Anna’s Archive.
 Note that as of 2024-07-13 this does not appear to be working. See the docstring
