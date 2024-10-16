@@ -35,7 +35,7 @@
   "Callback function to run by `annas-archive-download-file'.")
 
 (defconst annas-archive-home-url
-  "https://annas-archive.org/"
+  "https://annas-archive.li/"
   "URL to Anna’s Archive.")
 
 (defconst annas-archive-auth-url
