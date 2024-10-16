@@ -6,38 +6,32 @@
 
 ## Installation
 
-### Manual installation
-
-Clone this repository and add this to your `init.el` file:
+Clone this repository to your Emacs load path and add this to your `init.el` file:
 
 ```emacs-lisp
-(add-to-list 'load-path "path/to/annas-archive")
+(require 'annas-archive)
 ```
 
-where `"path/to/annas-archive"` is the path to the local repository you just cloned.
-
-### Elpaca
+### With `use-pacakge`
 
 If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, add this your `init.el` file:
 
 ```emacs-lisp
+;; with vc
 (use-package annas-archive
-  :ensure (annas-archive
-	   :host github
-	   :repo "benthamite/annas-archive")
-  :demand t)
-```
+  :vc (:url "https://github.com/benthamite/annas-archive"))
 
-### Straight
-
-If you use the [straight](https://github.com/radian-software/straight.el) package manager, add this your `init.el` file:
-
-```emacs-lisp
+;; with elpaca
 (use-package annas-archive
-  :straight (annas-archive
-	   :host github
-	   :repo "benthamite/annas-archive")
-  :demand t)
+  :ensure (:host github :repo "benthamite/annas-archive"))
+
+;; with straight
+(use-package annas-archive
+  :straight (:host github :repo "benthamite/annas-archive"))
+
+;; with quelpa
+(use-package annas-archive
+  :quelpa (annas-archive :fetcher github :repo "benthamite/annas-archive"))
 ```
 
 ## Configuration
