@@ -44,6 +44,19 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-included-file-extensions`: The list of file extensions to include in search results. By default, all supported file extensions are included.
 
+Here’s an example configuration, using elpaca:
+
+```emacs-lisp
+(use-package annas-archive
+  :ensure (:host github
+                 :repo "benthamite/annas-archive")
+  
+  :custom
+  (annas-archive-included-file-extensions '("pdf"))
+  (annas-archive-use-fast-download-links t)
+  (annas-archive-use-eww t))
+```
+
 ## Usage
 
 `M-x annas-archive-download` followed by the search string (e.g. book title or ISBN).
