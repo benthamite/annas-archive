@@ -2,7 +2,7 @@
 
 ## Introduction
 
-`annas-archive` provides rudimentary integration for [Anna’s Archive](https://annas-archive.org/), the largest existing search engine for shadow libraries.
+`annas-archive` provides rudimentary Emacs integration for [Anna’s Archive](https://annas-archive.org/), the largest existing search engine for shadow libraries.
 
 ## Installation
 
