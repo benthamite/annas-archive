@@ -31,9 +31,6 @@
 
 ;;;;; Anna’s Archive
 
-(defvar annas-archive-callback nil
-  "Callback function to run by `annas-archive-download-file'.")
-
 (defconst annas-archive-home-url
   "https://annas-archive.org/"
   "URL to Anna’s Archive.")
@@ -41,6 +38,9 @@
 (defconst annas-archive-auth-url
   (concat annas-archive-home-url "account/")
   "URL to authenticate with Anna’s Archive.")
+
+(defvar annas-archive-callback nil
+  "Callback function to run by `annas-archive-download-file'.")
 
 (defconst annars-archive-supported-file-extensions
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
