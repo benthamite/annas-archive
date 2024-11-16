@@ -42,6 +42,10 @@
   (concat annas-archive-home-url "account/")
   "URL to authenticate with Anna’s Archive.")
 
+(defconst annars-archive-supported-file-extensions
+  '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
+  "List of supported file extensions.")
+
 ;;;; User options
 
 (defgroup annas-archive ()
@@ -73,6 +77,13 @@ This user option is only relevant when `annas-archive-use-eww' is non-nil."
   :type 'directory
   :group 'annas-archive)
 
+(defcustom annas-archive-included-file-extensions
+  annars-archive-supported-file-extensions
+  "List of file extensions to include in search results.
+By default, all supported file extensions are included."
+  :type '(repeat string)
+  :group 'annas-archive)
+
 ;;;; Functions
 
 ;;;###autoload
@@ -99,17 +110,32 @@ function was called, if any."
 (defun annas-archive-select-and-open-url ()
   "Get the download URLs from the Anna’s Archive search results buffer."
   (remove-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
-  (save-window-excursion
-    (let (links)
-      (dolist (cons (annas-archive-collect-links-in-buffer))
-	(when (string-match-p "\\.pdf" (car cons))
-	  (push cons links)))
-      (if links
-	  (let* ((selection (completing-read "Select a link: " links nil t))
-		 (url (alist-get selection links nil nil 'string=)))
-	    (add-hook 'eww-after-render-hook #'annas-archive-proceed-to-download-page)
-	    (eww url))
+  (unless (annas-archive-collect-results)
+    (when (and (not (equal (sort (copy-sequence annas-archive-included-file-extensions) #'string<)
+			   (sort (copy-sequence annars-archive-supported-file-extensions) #'string<)))
+	       (y-or-n-p "No results found. Try again with all file extensions? "))
+      (unless (annas-archive-collect-results annars-archive-supported-file-extensions)
 	(message "No results found.")))))
+
+(defun annas-archive-collect-results (&optional extensions)
+  "Collect the download URLs from the Anna’s Archive search results buffer.
+Only include links whose file extensions match EXTENSIONS, if provided. If
+EXTENSIONS is nil, use `annas-archive-included-file-extensions'."
+  (save-window-excursion
+    (let* ((extensions (or extensions annas-archive-included-file-extensions))
+	   (regexp (mapconcat (lambda (extension)
+				"Generate a regular expression that matches EXTENSIONS."
+				(concat "\\." extension))
+			      extensions "\\|"))
+	   links)
+      (dolist (cons (annas-archive-collect-links-in-buffer))
+	(when (string-match-p regexp (car cons))
+	  (push cons links)))
+      (when links
+	(let* ((selection (completing-read "Select a link: " links nil t))
+	       (url (alist-get selection links nil nil 'string=)))
+	  (add-hook 'eww-after-render-hook #'annas-archive-proceed-to-download-page)
+	  (eww url))))))
 
 (defun annas-archive-collect-links-in-buffer ()
   "Get an alist of link titles and URLs for all links in the current `eww' buffer."
@@ -240,4 +266,3 @@ of the user option `annas-archive-use-eww' for more information."
 
 (provide 'annas-archive)
 ;;; annas-archive.el ends here
-

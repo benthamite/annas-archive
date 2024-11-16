@@ -38,6 +38,8 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-use-fast-download-links`: If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.org/donate) is required.
 
+- `annas-archive-included-file-extensions`: The list of of file extensions to include in search results. By default, all supported file extensions are included.
+
 ## Usage
 
 `M-x annas-archive-download` followed by the search string (e.g. book title or ISBN).
