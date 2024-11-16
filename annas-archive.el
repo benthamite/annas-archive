@@ -55,7 +55,7 @@
   "Rudimentary integration for Anna’s Archive."
   :group 'emacs)
 
-(defcustom annas-archive-use-fast-download-links t
+(defcustom annas-archive-use-fast-download-links nil
   "Whether to use fast download links from Anna’s Archive.
 If non-nil, use fast download links available to paying members."
   :type 'boolean
