@@ -46,6 +46,9 @@
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
   "List of supported file extensions.")
 
+(defvar annas-archive-post-download-hook-extra-args nil
+  "Optional list of extra arguments to pass to `annas-archive-post-download-hook'.")
+
 ;;;; User options
 
 (defgroup annas-archive ()
@@ -54,19 +57,15 @@
 
 (defcustom annas-archive-use-fast-download-links t
   "Whether to use fast download links from Anna’s Archive.
-If t, use fast download links available to paying members."
+If non-nil, use fast download links available to paying members."
   :type 'boolean
   :group 'annas-archive)
 
 (defcustom annas-archive-use-eww nil
   "Whether to use `eww' for downloading files.
-If t, files will be downloaded directly with `eww'.
-
-It used to be the case that one could authenticate a session with `eww', but as
-of 2024-07-13 this does not appear to be possible anymore. Non-authenticated
-sessions require the user to click on a captcha screen visible only to browsers
-that support Javascript. Thus, this user option should be set to nil for the
-time being."
+If non-nil, files will be downloaded directly with `eww'. If
+`annas-archive-use-fast-download-links' is non nil, you needto authenticate to
+be able to download the files with eww; run `annas-archive-authenticate'."
   :type 'boolean
   :group 'annas-archive)
 
@@ -83,6 +82,12 @@ This user option is only relevant when `annas-archive-use-eww' is non-nil."
 By default, all supported file extensions are included."
   :type '(repeat string)
   :group 'annas-archive)
+
+(defcustom annas-archive-post-download-hook nil
+  "Hook run after downloading a file from Anna’s Archive.
+The hook is run with two arguments: the file to attach and the list, if any,
+stored in `annas-archive-post-download-hook-extra-args'."
+  :type 'hook)
 
 ;;;; Functions
 
@@ -101,11 +106,12 @@ function was called, if any."
 			  (read-string "Search string: " string))
 			 (string string)
 			 (t (read-string "Search string: "))))
-	   (url (format "%ssearch?index=&page=1&q=%s&ext=pdf&sort="
-			annas-archive-home-url (url-encode-url string))))
+	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
       (when callback (setq annas-archive-callback callback))
       (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
       (eww url))))
+
+;;;;; Selection
 
 (defun annas-archive-select-and-open-url ()
   "Get the download URLs from the Anna’s Archive search results buffer."
@@ -134,7 +140,7 @@ EXTENSIONS is nil, use `annas-archive-included-file-extensions'."
       (when links
 	(let* ((selection (completing-read "Select a link: " links nil t))
 	       (url (alist-get selection links nil nil 'string=)))
-	  (add-hook 'eww-after-render-hook #'annas-archive-proceed-to-download-page)
+	  (add-hook 'eww-after-render-hook #'annas-archive-download-file)
 	  (eww url))))))
 
 (defun annas-archive-collect-links-in-buffer ()
@@ -163,18 +169,26 @@ EXTENSIONS is nil, use `annas-archive-included-file-extensions'."
 	(goto-char (max end (1+ (point)))))  ;; ensure progress by moving at least one character forward
       (nreverse candidates))))
 
+;;;;; Downloading
+
 (declare-function browse-url-default-browser "browse-url")
-(defun annas-archive-proceed-to-download-page ()
+(defun annas-archive-download-file ()
   "Proceed to the Anna’s Archive download page."
-  (remove-hook 'eww-after-render-hook #'annas-archive-proceed-to-download-page)
+  (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
   (save-window-excursion
-    (let* ((speed (if annas-archive-use-fast-download-links "Fast" "Slow"))
-	   (url (annas-archive-get-url-in-link (concat speed " Partner Server"))))
-      (if annas-archive-use-eww
-	  (progn
-	    (add-hook 'eww-after-render-hook #'annas-archive-download-file)
-	    (eww url))
-	(browse-url-default-browser url)))))
+    (let ((buffer (current-buffer)))
+      (goto-char (point-min))
+      (if (re-search-forward "Our servers are not responding" nil t)
+	  (message "Servers are not responding. Please try again later.")
+	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
+	  (if-let ((url (annas-archive-get-url-in-link (concat speed " partner server"))))
+	      (let ((message (format "Found %s download link. Proceeding to download..." speed)))
+		(if annas-archive-use-eww
+		    (url-retrieve url #'annas-archive-eww-download-file-callback)
+		  (browse-url-default-browser url))
+		(message message))
+	    (user-error "No download link found. If using fast download links, make sure you have run `annas-archive-authenticate'?"))))
+      (kill-buffer buffer))))
 
 (defun annas-archive-get-url-in-link (title)
   "Return the URL of the link whose title is TITLE."
@@ -193,58 +207,28 @@ EXTENSIONS is nil, use `annas-archive-included-file-extensions'."
 		       (point-max)))))
     found-url))
 
-(defvar ebib-extras-attach-file-key)
-(defun annas-archive-download-file ()
-  "Download the file from the Anna’s Archive download page."
-  (remove-hook 'eww-after-render-hook 'annas-archive-download-file)
-  (let* ((bibtex-key ebib-extras-attach-file-key)
-	 (url (annas-archive-get-download-url))
-	 (raw-file (file-name-nondirectory url))
-	 (sans-extension (file-name-sans-extension raw-file))
-	 (extension (file-name-extension raw-file))
-	 (filename (file-name-with-extension (substring sans-extension 0 100) extension))
-	 (final-path (file-name-concat annas-archive-downloads-dir filename))
-	 (temp-path (file-name-with-extension final-path ".tmp"))
-	 (callback annas-archive-callback))
-    (setq annas-archive-callback nil)
-    (let ((process (start-process "download-file" "*download-output*" "curl" "-o" temp-path "-L" url)))
-      (set-process-sentinel process
-			    (lambda (_proc event)
-			      (cond ((string= event "finished\n")
-				     (rename-file temp-path final-path 'ok-if-already-exists)
-				     (message "Downloaded `%s' to `%s`" filename final-path)
-				     (annas-archive-run-callback callback final-path bibtex-key))
-				    ((string-prefix-p "exited abnormally" event)
-				     (string-match "code \\([0-9]+\\)" event)
-				     (message "Download failed with error code %s for `%s`"
-					      (match-string 1 event) filename))
-				    (t
-				     (message "Unexpected process event: %s" event))))))
-    (message "Downloading `%s'..." filename)))
-
-(defun annas-archive-run-callback (callback file key)
-  "When CALLBACK is non-nil, run it with FILE and KEY as arguments.
-FILE is the file to attach and KEY is the BibTeX key of the associated entry."
-  (when callback
-    (funcall callback file key)))
-
-(defun annas-archive-get-download-url ()
-  "Get the download URL from the Anna’s Archive download page."
-  (or (annas-archive-get-url-in-link "Download now")
-      (let ((generic-error "Could not find download link")
-	    (quota-exceeded "You’ve run out of fast downloads today"))
-	(goto-char (point-min))
-	(user-error (cond ((re-search-forward quota-exceeded nil t)
-			   quota-exceeded)
-			  (t generic-error))))))
+(defun annas-archive-eww-download-file-callback (status)
+  "Callback function for run after downloading a file with `eww'.
+STATUS is the status of the download process. See the `url-retrieve' docstring
+for details."
+  (if (plist-get status :error)
+      (message "Download failed: %s" (plist-get status :error))
+    (let* ((extension (file-name-extension (plist-get status :redirect)))
+	   (base (make-temp-name "downloaded-from-annas-archive-"))
+	   (filename (if extension
+			 (file-name-with-extension base extension)
+		       base))
+	   (path (file-name-concat annas-archive-downloads-dir filename)))
+      (write-file path)
+      (message "Downloaded file: `%s'" path)
+      (run-hook-with-args 'annas-archive-post-download-hook
+			  path annas-archive-post-download-hook-extra-args))))
 
 ;;;;; Authentication
 
 ;;;###autoload
 (defun annas-archive-authenticate ()
-  "Authenticate with Anna’s Archive.
-Note that as of 2024-07-13 this does not appear to be working. See the docstring
-of the user option `annas-archive-use-eww' for more information."
+  "Authenticate with Anna’s Archive."
   (interactive)
   (save-window-excursion
     (add-hook 'eww-after-render-hook #'annas-archive-get-authentication-details)
