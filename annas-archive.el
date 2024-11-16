@@ -187,7 +187,7 @@ EXTENSIONS is nil, use `annas-archive-included-file-extensions'."
 		    (url-retrieve url #'annas-archive-eww-download-file-callback)
 		  (browse-url-default-browser url))
 		(message message))
-	    (user-error "No download link found. If using fast download links, make sure you have run `annas-archive-authenticate'?"))))
+	    (user-error "No download link found. If using fast download links, make sure you have run `annas-archive-authenticate'"))))
       (kill-buffer buffer))))
 
 (defun annas-archive-get-url-in-link (title)
