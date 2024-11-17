@@ -211,22 +211,21 @@ TYPES is nil, use `annas-archive-included-file-types'."
 		       (point-max)))))
     found-url))
 
-(defun annas-archive-eww-download-file-callback (status)
-  "Callback function for run after downloading a file with `eww'.
-STATUS is the status of the download process. See the `url-retrieve' docstring
-for details."
-  (if (plist-get status :error)
-      (message "Download failed: %s" (plist-get status :error))
-    (let* ((extension (file-name-extension (plist-get status :redirect)))
-	   (base (make-temp-name "downloaded-from-annas-archive-"))
-	   (filename (if extension
-			 (file-name-with-extension base extension)
-		       base))
-	   (path (file-name-concat annas-archive-downloads-dir filename)))
-      (write-file path)
-      (message "Downloaded file: `%s'" path)
-      (run-hook-with-args 'annas-archive-post-download-hook
-			  path annas-archive-post-download-hook-extra-args))))
+(defun annas-archive-eww-download-file-callback (url)
+  "Callback function for run after downloading file in URL with `eww'."
+  (lambda (status)
+    "STATUS is the status of the download process; see `url-retrieve' for details."
+    (if (plist-get status :error)
+	(message "Download failed: %s" (plist-get status :error))
+      (let* ((extension (file-name-extension (plist-get status :redirect)))
+	     (base (make-temp-name "downloaded-from-annas-archive-"))
+	     (filename (if extension
+			   (file-name-with-extension base extension)
+			 base))
+	     (path (file-name-concat annas-archive-downloads-dir filename)))
+	(write-file path)
+	(message "Downloaded file: `%s'" path)
+	(run-hook-with-args 'annas-archive-post-download-hook url path)))))
 
 ;;;;; Authentication
 
