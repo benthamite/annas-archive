@@ -44,20 +44,34 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-included-file-types`: The list of file extensions to include in search results. By default, all supported file extensions are included.
 
-Here’s an example configuration, using elpaca:
 - `annas-archive-retry-with-all-file-types`: Whether to try the search again with all supported file types when the search restricted to `annas-archive-included-file-types` returns no results.
 
+Here’s an example from my personal configuration, using elpaca:
 
 ```emacs-lisp
 (use-package annas-archive
   :ensure (:host github
                  :repo "benthamite/annas-archive")
-  
   :custom
   (annas-archive-included-file-types '("pdf"))
   (annas-archive-use-fast-download-links t)
-  (annas-archive-use-eww t))
+  (annas-archive-use-eww t)
+
+  :config
+  (defun annas-archive-process-download (url &optional file)
+    "Process downloaded FILE from URL in Anna's Archive."
+    (when-let ((key ebib-extras-attach-file-key))
+      (setq ebib-extras-attach-file-key nil)
+      (if annas-archive-use-eww
+	  (ebib-extras-attach-file file key)
+	(message "Save the file that opens in your browser (%s) and attach it to the relevant Ebib entry (%s)"
+		 url key))))
+
+  :hook
+  (annas-archive-post-download-hook . annas-archive-process-download))
 ```
+
+The function `annas-archive-process-download` calls some of my extensions for `Ebib`, a bibliography manager. It allows me to search the Annas Archive database with a default string obtained from the Ebib entry at point, and then, when `annas-archive-use-eww` is set to `t`, attach the downloaded file to that entry.
 
 ## Usage
 
