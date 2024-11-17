@@ -49,9 +49,6 @@ This address changes regularly; to find the most recent URL, go to
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
   "List of supported file extensions.")
 
-(defvar annas-archive-post-download-hook-extra-args nil
-  "Optional list of extra arguments to pass to `annas-archive-post-download-hook'.")
-
 ;;;; User options
 
 (defgroup annas-archive ()
