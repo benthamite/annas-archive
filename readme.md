@@ -38,7 +38,7 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-use-fast-download-links`: If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.org/donate) is required.
 
-- `annas-archive-use-eww`: If non-nil, the package will use the `eww` browser to download files. Otherwise, the default browser will be used. If `annas-archive-use-fast-download-links` is non-nil, to use this option you must first authenticate by running `M-x annas-archive-authenticate`.
+- `annas-archive-use-eww`: If non-nil, the package will use the `eww` browser to download files. Otherwise, the default browser will be used. If `annas-archive-use-fast-download-links` is non-nil, to use this option you must first authenticate by running `M-x annas-archive-authenticate`. NB: authentication has been working erratically, so if you are unable to authenticate and want to use fast download links, you may have to set this to nil, unfortunately.
 
 - `annas-archive-downloads-dir`: The directory where the downloaded files will be saved. The default value is `~/Downloads/`.
 
