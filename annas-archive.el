@@ -33,7 +33,10 @@
 
 (defconst annas-archive-home-url
   "https://annas-archive.org/"
-  "URL to Anna’s Archive.")
+  "URL to Anna’s Archive.
+This address changes regularly; to find the most recent URL, go to
+<https://en.wikipedia.org/wiki/Anna%27s_Archive> and get the link under
+‘External links’.")
 
 (defconst annas-archive-auth-url
   (concat annas-archive-home-url "account/")
