@@ -100,14 +100,10 @@ stored in `annas-archive-post-download-hook-extra-args'."
 ;;;; Functions
 
 ;;;###autoload
-(defun annas-archive-download (&optional string confirm callback)
+(defun annas-archive-download (&optional string confirm)
   "Search Anna’s Archive for STRING and download the selected item.
 If STRING is nil, prompt for a search string. If both STRING and CONFIRM are
-non-nil, prompt the user for confirmation to use STRING as the search string.
-
-CALLBACK is a function called when the process concludes. The function takes two
-arguments: the file to attach and the BibTeX key of the entry from which this
-function was called, if any."
+non-nil, prompt the user for confirmation to use STRING as the search string."
   (interactive)
   (save-window-excursion
     (let* ((string (cond ((and string confirm)
@@ -115,7 +111,6 @@ function was called, if any."
 			 (string string)
 			 (t (read-string "Search string: "))))
 	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
-      (when callback (setq annas-archive-callback callback))
       (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
       (eww url))))
 
