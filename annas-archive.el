@@ -86,6 +86,11 @@ By default, all supported file extensions are included."
   :type '(repeat string)
   :group 'annas-archive)
 
+(defcustom annas-archive-retry-with-all-file-types t
+  "Whether to retry to search with all supported file types when no results found."
+  :type 'boolean
+  :group 'annas-archive)
+
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
 The hook is run with two arguments: the file to attach and the list, if any,

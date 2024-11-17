@@ -45,6 +45,8 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 - `annas-archive-included-file-types`: The list of file extensions to include in search results. By default, all supported file extensions are included.
 
 Here’s an example configuration, using elpaca:
+- `annas-archive-retry-with-all-file-types`: Whether to try the search again with all supported file types when the search restricted to `annas-archive-included-file-types` returns no results.
+
 
 ```emacs-lisp
 (use-package annas-archive
