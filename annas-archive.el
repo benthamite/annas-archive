@@ -93,8 +93,7 @@ By default, all supported file extensions are included."
 
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
-The hook is run with two arguments: the file to attach and the list, if any,
-stored in `annas-archive-post-download-hook-extra-args'."
+The hook is run with the file path as its first argument."
   :type 'hook)
 
 ;;;; Functions
@@ -187,10 +186,11 @@ TYPES is nil, use `annas-archive-included-file-types'."
 	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
 	  (if-let ((url (annas-archive-get-url-in-link (concat speed " partner server"))))
 	      (let ((message (format "Found %s download link. Proceeding to download..." speed)))
+		(message message)
 		(if annas-archive-use-eww
-		    (url-retrieve url #'annas-archive-eww-download-file-callback)
-		  (browse-url-default-browser url))
-		(message message))
+		    (url-retrieve url (annas-archive-eww-download-file-callback url))
+		  (browse-url-default-browser url)
+		  (run-hook-with-args 'annas-archive-post-download-hook url)))
 	    (user-error "No download link found. If using fast download links, make sure you have run `annas-archive-authenticate'"))))
       (kill-buffer buffer))))
 
