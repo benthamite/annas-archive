@@ -133,7 +133,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
   (save-window-excursion
     (let* ((types (or types annas-archive-included-file-types))
 	   (regexp (mapconcat (lambda (extension)
-				"Generate a regular expression that matches TYPES."
+				"Generate a regexp matching any of the types in TYPES."
 				(concat "\\." extension))
 			      types "\\|"))
 	   links)
