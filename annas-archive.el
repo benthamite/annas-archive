@@ -65,7 +65,10 @@ If non-nil, use fast download links available to paying members."
   "Whether to use `eww' for downloading files.
 If non-nil, files will be downloaded directly with `eww'. If
 `annas-archive-use-fast-download-links' is non nil, you needto authenticate to
-be able to download the files with eww; run `annas-archive-authenticate'."
+be able to download the files with eww; run `annas-archive-authenticate'.
+
+NB: this option has been working erratically, so if you are unable to
+authenticate, you may have to set this to nil, unfortunately."
   :type 'boolean
   :group 'annas-archive)
 
