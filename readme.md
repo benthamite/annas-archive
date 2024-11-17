@@ -71,7 +71,7 @@ Here’s an example from my personal configuration, using elpaca:
   (annas-archive-post-download-hook . annas-archive-process-download))
 ```
 
-The function `annas-archive-process-download` calls some of my extensions for `Ebib`, a bibliography manager. It allows me to search the Annas Archive database with a default string obtained from the Ebib entry at point, and then, when `annas-archive-use-eww` is set to `t`, attach the downloaded file to that entry.
+The function `annas-archive-process-download` makes use of my extensions for `Ebib`, a bibliography manager. It allows me to search the Anna’s Archive database with a default string obtained from the Ebib entry at point, and then, if `annas-archive-use-eww` is set to `t`, attach the downloaded file to that entry—all without having to leave Emacs.
 
 ## Usage
 
