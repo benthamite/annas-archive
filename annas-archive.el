@@ -45,7 +45,7 @@ This address changes regularly; to find the most recent URL, go to
 (defvar annas-archive-callback nil
   "Callback function to run by `annas-archive-download-file'.")
 
-(defconst annars-archive-supported-file-extensions
+(defconst annars-archive-supported-file-types
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
   "List of supported file extensions.")
 
@@ -79,8 +79,8 @@ This user option is only relevant when `annas-archive-use-eww' is non-nil."
   :type 'directory
   :group 'annas-archive)
 
-(defcustom annas-archive-included-file-extensions
-  annars-archive-supported-file-extensions
+(defcustom annas-archive-included-file-types
+  annars-archive-supported-file-types
   "List of file extensions to include in search results.
 By default, all supported file extensions are included."
   :type '(repeat string)
@@ -120,22 +120,23 @@ function was called, if any."
   "Get the download URLs from the Anna’s Archive search results buffer."
   (remove-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
   (unless (annas-archive-collect-results)
-    (when (and (not (equal (sort (copy-sequence annas-archive-included-file-extensions) #'string<)
-			   (sort (copy-sequence annars-archive-supported-file-extensions) #'string<)))
-	       (y-or-n-p "No results found. Try again with all file extensions? "))
-      (unless (annas-archive-collect-results annars-archive-supported-file-extensions)
+    (when (and annas-archive-retry-with-all-file-types
+	       (not (equal (sort (copy-sequence annas-archive-included-file-types) #'string<)
+			   (sort (copy-sequence annars-archive-supported-file-types) #'string<)))
+	       (y-or-n-p "No results found. Try again with all file types? "))
+      (unless (annas-archive-collect-results annars-archive-supported-file-types)
 	(message "No results found.")))))
 
-(defun annas-archive-collect-results (&optional extensions)
+(defun annas-archive-collect-results (&optional types)
   "Collect the download URLs from the Anna’s Archive search results buffer.
-Only include links whose file extensions match EXTENSIONS, if provided. If
-EXTENSIONS is nil, use `annas-archive-included-file-extensions'."
+Only include links whose file types match TYPES if provided. If
+TYPES is nil, use `annas-archive-included-file-types'."
   (save-window-excursion
-    (let* ((extensions (or extensions annas-archive-included-file-extensions))
+    (let* ((types (or types annas-archive-included-file-types))
 	   (regexp (mapconcat (lambda (extension)
-				"Generate a regular expression that matches EXTENSIONS."
+				"Generate a regular expression that matches TYPES."
 				(concat "\\." extension))
-			      extensions "\\|"))
+			      types "\\|"))
 	   links)
       (dolist (cons (annas-archive-collect-links-in-buffer))
 	(when (string-match-p regexp (car cons))

@@ -42,7 +42,7 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-downloads-dir`: The directory where the downloaded files will be saved. The default value is `~/Downloads/`.
 
-- `annas-archive-included-file-extensions`: The list of file extensions to include in search results. By default, all supported file extensions are included.
+- `annas-archive-included-file-types`: The list of file extensions to include in search results. By default, all supported file extensions are included.
 
 Here’s an example configuration, using elpaca:
 
@@ -52,7 +52,7 @@ Here’s an example configuration, using elpaca:
                  :repo "benthamite/annas-archive")
   
   :custom
-  (annas-archive-included-file-extensions '("pdf"))
+  (annas-archive-included-file-types '("pdf"))
   (annas-archive-use-fast-download-links t)
   (annas-archive-use-eww t))
 ```
