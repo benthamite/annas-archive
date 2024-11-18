@@ -185,12 +185,12 @@ TYPES is nil, use `annas-archive-included-file-types'."
 	  (message "Servers are not responding. Please try again later.")
 	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
 	  (if-let ((url (annas-archive-get-url-in-link (concat speed " partner server"))))
-	      (let ((message (format "Found %s download link. Proceeding to download..." speed)))
-		(message message)
-		(if annas-archive-use-eww
+	      (if annas-archive-use-eww
+		  (progn
 		    (url-retrieve url (annas-archive-eww-download-file-callback url))
-		  (browse-url-default-browser url)
-		  (run-hook-with-args 'annas-archive-post-download-hook url)))
+		    (message (format "Found %s download link. Proceeding to download..." speed)))
+		(browse-url-default-browser url)
+		(run-hook-with-args 'annas-archive-post-download-hook url))
 	    (user-error "No download link found. If using fast download links, make sure you have run `annas-archive-authenticate'"))))
       (kill-buffer buffer))))
 
