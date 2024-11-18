@@ -199,7 +199,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
   (let (found-url)
     (save-excursion
       (goto-char (point-min))
-      (while (and (not found-url) (not (eobp)))
+      (while (not (or found-url (eobp)))
 	(when-let* ((url (get-text-property (point) 'shr-url))
 		    (link-title (buffer-substring-no-properties
 				 (point)
