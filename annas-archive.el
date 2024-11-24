@@ -72,6 +72,13 @@ nil, unfortunately."
   :type 'boolean
   :group 'annas-archive)
 
+(defcustom annas-archive-when-eww-download-fails 'external
+  "What to do in the event of a failure to download the file with `eww'.
+If `external' (default), download the file with the default browser. If `error',
+signal an error. Otherwise, fail silently."
+  :type 'boolean
+  :group 'annas-archive)
+
 (defcustom annas-archive-downloads-dir
   (expand-file-name "~/Downloads/")
   "Directory where files downloaded from Anna’s Archive are saved.
@@ -174,6 +181,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
 
 ;;;;; Downloading
 
+(defvar eww-data)
 (declare-function browse-url-default-browser "browse-url")
 (defun annas-archive-download-file ()
   "Proceed to the Anna’s Archive download page."
@@ -224,17 +232,34 @@ URL is the URL of the download link."
   "Callback function for run after downloading file in URL with `eww'."
   (lambda (status)
     "STATUS is the status of the download process; see `url-retrieve' for details."
-    (if (plist-get status :error)
-	(message "Download failed: %s" (plist-get status :error))
-      (let* ((extension (file-name-extension (plist-get status :redirect)))
-	     (base (make-temp-name "downloaded-from-annas-archive-"))
-	     (filename (if extension
-			   (file-name-with-extension base extension)
-			 base))
-	     (path (file-name-concat annas-archive-downloads-dir filename)))
-	(write-file path)
-	(message "Downloaded file: `%s'" path)
-	(run-hook-with-args 'annas-archive-post-download-hook url path)))))
+    (if-let ((err (plist-get status :error)))
+	(message "Download failed: %s" err)
+      (if-let* ((extension (file-name-extension (plist-get status :redirect)))
+		(base (make-temp-name "downloaded-from-annas-archive-"))
+		(filename (if extension
+			      (file-name-with-extension base extension)
+			    base))
+		(path (file-name-concat annas-archive-downloads-dir filename)))
+	  (annas-archive-save-file url path)
+	(annas-archive-handle-eww-failure url)))))
+
+(defun annas-archive-save-file (url path)
+  "Save the file at URL to PATH."
+  (write-file path)
+  (message "Downloaded file: `%s'" path)
+  (run-hook-with-args 'annas-archive-post-download-hook url path))
+
+(defun annas-archive-handle-eww-failure (url)
+  "Take appropriate action when `eww' fails to download file from URL.
+Depending on the value of `annas-archive-when-eww-download-fails', download
+externally, signal an error, or fail silently."
+  (let ((message "Failed to download file with `eww'."))
+    (pcase annas-archive-when-eww-download-fails
+      ('external
+       (annas-archive-download-file-externally url)
+       (message (concat message " Downloading with the default browser instead.")))
+      ('error (user-error message))
+      (_ (message message)))))
 
 ;;;;; Authentication
 
