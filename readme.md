@@ -48,6 +48,8 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-retry-with-all-file-types` (default: `t`): Whether to try the search again with all supported file types when the search restricted to `annas-archive-included-file-types` returns no results.
 
+- `annas-archive-eww-post-download-hook`: Hook run after downloading a file from Anna’s Archive. The hook is run with the url as its first argument and, when the file was downloaded with `eww`, the destination path of the downloaded file as its second argument.
+
 Here’s an example from my personal configuration, using elpaca:
 
 ```emacs-lisp

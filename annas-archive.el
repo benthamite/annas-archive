@@ -100,7 +100,9 @@ By default, all supported file extensions are included."
 
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
-The hook is run with the file path as its first argument."
+The hook is run with the url as its first argument and, when the file was
+downloaded with `eww', the destination path of the downloaded file as its second
+argument."
   :type 'hook)
 
 ;;;; Functions
