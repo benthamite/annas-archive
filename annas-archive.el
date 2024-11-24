@@ -144,7 +144,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
 				(concat "\\." extension))
 			      types "\\|"))
 	   links)
-      (dolist (cons (annas-archive-collect-links-in-buffer))
+      (dolist (cons (annas-archive-collect-links))
 	(when (string-match-p regexp (car cons))
 	  (push cons links)))
       (when links
@@ -153,7 +153,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
 	  (add-hook 'eww-after-render-hook #'annas-archive-download-file)
 	  (eww url))))))
 
-(defun annas-archive-collect-links-in-buffer ()
+(defun annas-archive-collect-links ()
   "Get an alist of link titles and URLs for all links in the current `eww' buffer."
   (save-excursion
     (goto-char (point-min))
