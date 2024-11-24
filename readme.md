@@ -42,7 +42,7 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww`. If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently.
 
-- `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. 
+- `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. This user option is only relevant when `annas-archive-use-eww` is non-nil.
 
 - `annas-archive-included-file-types`: The list of file extensions to include in search results. By default, all supported file extensions are included.
 
