@@ -182,7 +182,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
 ;;;;; Downloading
 
 (defvar eww-data)
-(declare-function browse-url-default-browser "browse-url")
+(autoload 'browse-url-default-browser "browse-url")
 (defun annas-archive-download-file ()
   "Proceed to the Anna’s Archive download page."
   (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
