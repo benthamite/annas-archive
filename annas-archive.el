@@ -186,13 +186,22 @@ TYPES is nil, use `annas-archive-included-file-types'."
 	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
 	  (if-let ((url (annas-archive-get-url-in-link (concat speed " partner server"))))
 	      (if annas-archive-use-eww
-		  (progn
-		    (url-retrieve url (annas-archive-eww-download-file-callback url))
-		    (message (format "Found %s download link. Proceeding to download..." speed)))
-		(browse-url-default-browser url)
-		(run-hook-with-args 'annas-archive-post-download-hook url))
-	    (user-error "No download link found. If using fast download links, make sure you have run `annas-archive-authenticate'"))))
+		  (annas-archive-download-file-with-eww url speed)
+		(annas-archive-download-file-externally url))
+	    (annas-archive-handle-eww-failure (plist-get eww-data :url)))))
       (kill-buffer buffer))))
+
+(defun annas-archive-download-file-with-eww (url speed)
+  "Download the file in URL with `eww'.
+URL is the URL of the download link, and SPEED is the download speed."
+  (url-retrieve url (annas-archive-eww-download-file-callback url))
+  (message (format "Found %s download link. Proceeding to download..." speed)))
+
+(defun annas-archive-download-file-externally (url)
+  "Download the file in URL with the default browser.
+URL is the URL of the download link."
+  (browse-url-default-browser url)
+  (run-hook-with-args 'annas-archive-post-download-hook url))
 
 (defun annas-archive-get-url-in-link (title)
   "Return the URL of the link whose title is TITLE."
