@@ -194,6 +194,7 @@ TYPES is nil, use `annas-archive-included-file-types'."
 If called interactively, or INTERACTIVE is non-nil, display a message indicating
 where the file will be downloaded. Otherwise, kill the eww buffer."
   (interactive "p")
+  (annas-archive-ensure-download-page)
   (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
   (save-window-excursion
     (let ((buffer (current-buffer)))
@@ -210,6 +211,15 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 	  (message "File will be downloaded to `%s'" annas-archive-downloads-dir)
 	(kill-buffer buffer)))))
 
+;;;###autoload
+(defun annas-archive-ensure-download-page ()
+  "Ensure that the current `eww' buffer is a download page from Anna’s Archive."
+  (if (derived-mode-p 'eww-mode)
+      (if-let ((url (plist-get eww-data :url)))
+	  (unless (string-match-p annas-archive-download-url-pattern url)
+	    (user-error "Not on a download page"))
+	(user-error "No URL found"))
+    (user-error "Not in an `eww' buffer")))
 
 (defun annas-archive-download-file-with-eww (url speed)
   "Download the file in URL with `eww'.
