@@ -42,6 +42,10 @@ This address changes regularly; to find the most recent URL, go to
   (concat annas-archive-home-url "account/")
   "URL to authenticate with Anna’s Archive.")
 
+(defconst annas-archive-download-url-pattern
+  (concat annas-archive-home-url "md5/.*")
+  "Regexp pattern for Anna’s Archive download page.")
+
 (defvar annas-archive-callback nil
   "Callback function to run by `annas-archive-download-file'.")
 
