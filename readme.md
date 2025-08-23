@@ -40,7 +40,7 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 
 - `annas-archive-use-eww` (default: `nil`): If non-nil, the package will use the `eww` browser to download files. Otherwise, the default browser will be used. If `annas-archive-use-fast-download-links` is non-nil, to use this option you must first authenticate by running `M-x annas-archive-authenticate`.
 
-- `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww`. If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently. Note that if `annas-archive-use-fast-download-links` is set to `nil`, the `eww` download may fail because Anna’s Archive sometimes requires ticking a confirmation page before it exposes the file URL, which can only be done in an external browser.
+- `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww` (when `annas-archive-use-eww` is non-nil). If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently. Note that if `annas-archive-use-fast-download-links` is set to `nil`, the `eww` download may fail because Anna’s Archive sometimes requires ticking a confirmation page before it exposes the file URL, which can only be done in an external browser.
 
 - `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. This user option is only relevant when `annas-archive-use-eww` is non-nil.
 
