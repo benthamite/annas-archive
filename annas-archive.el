@@ -265,17 +265,18 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
           (when (and (string= title "*")
                      (not (member url star-urls)))
             (setq star-urls (append star-urls (list url)))))))
-    ;; Extract types by scanning the buffer blocks in the same visual order.
-    (let ((exts (annas-archive--exts-in-order)))
-      ;; Pair URL, best title, and ext (lists must be same length; if not, we
-      ;; gracefully stop at the shortest).
+    ;; Extract type and size by scanning the buffer blocks in the same visual order.
+    (let ((infos (annas-archive--info-in-order)))
+      ;; Pair URL, best title, type and size; stop at shortest list if lengths differ.
       (cl-mapcar
-       (lambda (url ext)
+       (lambda (url info)
          (let* ((cands (gethash url url->titles))
                 (best  (car (sort (cl-remove-if (lambda (s) (string= s "*")) cands)
-                                  (lambda (a b) (> (length a) (length b)))))))
-           (list :title (or best "*") :url url :type ext)))
-       star-urls exts))))
+                                  (lambda (a b) (> (length a) (length b))))))
+                (ext   (car info))
+                (size  (cdr info)))
+           (list :title (or best "*") :url url :type ext :size size)))
+       star-urls infos))))
 
 (defun annas-archive--md5-url-p (url)
   "Return non-nil if URL looks like an Anna’s Archive item (md5) page."
