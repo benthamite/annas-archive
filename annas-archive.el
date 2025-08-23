@@ -109,6 +109,11 @@ downloaded with `eww', the destination path of the downloaded file as its second
 argument."
   :type 'hook)
 
+(defcustom annas-archive-title-column-width 100
+  "Width of the title column when displaying search results."
+  :type 'integer
+  :group 'annas-archive)
+
 ;;;; Functions
 
 ;;;###autoload
@@ -150,11 +155,16 @@ If TYPES is nil, use `annas-archive-included-file-types`."
          (filtered (cl-remove-if-not
                     (lambda (r) (member (plist-get r :type) wanted))
                     results))
+         (title-width annas-archive-title-column-width)
          (cands (mapcar (lambda (r)
-                          (cons (format "%s — %s"
-                                        (plist-get r :title)
-                                        (upcase (or (plist-get r :type) "")))
-                                (plist-get r :url)))
+                          (let* ((title (annas-archive--truncate
+                                         (plist-get r :title) title-width))
+                                 (type  (upcase (or (plist-get r :type) "")))
+                                 (size  (or (plist-get r :size) "")))
+                            (cons (format (format "%%-%ds  %%-%ds  %%s"
+                                                  title-width 5)
+                                          title type size)
+                                  (plist-get r :url))))
                         filtered)))
     (if (null cands)
         (user-error "No matching results for types: %s" wanted)
@@ -202,6 +212,39 @@ We assume each result ‘card’ starts with a line that is exactly “*”."
                              (point-max)))))
           (push (annas-archive--ext-from-block block-beg block-end) exts)))
       (nreverse exts))))
+
+(defun annas-archive--size-from-block (beg end)
+  "Return human-readable size string found between BEG and END, like “1.2 MB”."
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      (when (re-search-forward
+             "\\([0-9]+\\(?:\\.[0-9]+\\)?[[:space:]]*[MGK]B\\)" nil t)
+        (string-trim (match-string 1)))))
+
+(defun annas-archive--info-in-order ()
+  "Return a list of cons cells (EXT . SIZE) in the visual order of the hits."
+  (save-excursion
+    (goto-char (point-min))
+    (let (info)
+      (while (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
+        (let ((block-beg (line-beginning-position))
+              (block-end (save-excursion
+                           (if (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
+                               (match-beginning 0)
+                             (point-max)))))
+          (push (cons
+                 (annas-archive--ext-from-block  block-beg block-end)
+                 (annas-archive--size-from-block block-beg block-end))
+                info)))
+      (nreverse info))))
+
+(defun annas-archive--truncate (str width)
+  "Return STR truncated to WIDTH characters, adding an ellipsis if needed."
+  (if (> (length str) width)
+      (concat (substring str 0 (- width 1)) "…")
+    str))
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
