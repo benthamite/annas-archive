@@ -49,7 +49,7 @@ This address changes regularly; to find the most recent URL, go to
 (defvar annas-archive-callback nil
   "Callback function to run by `annas-archive-download-file'.")
 
-(defconst annars-archive-supported-file-types
+(defconst annas-archive-supported-file-types
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
   "List of supported file extensions.")
 
@@ -91,7 +91,7 @@ This user option is only relevant when `annas-archive-use-eww' is non-nil."
   :group 'annas-archive)
 
 (defcustom annas-archive-included-file-types
-  annars-archive-supported-file-types
+  annas-archive-supported-file-types
   "List of file extensions to include in search results.
 By default, all supported file extensions are included."
   :type '(repeat string)
@@ -134,30 +134,110 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
   (unless (annas-archive-collect-results)
     (when (and annas-archive-retry-with-all-file-types
 	       (not (equal (sort (copy-sequence annas-archive-included-file-types) #'string<)
-			   (sort (copy-sequence annars-archive-supported-file-types) #'string<)))
+			   (sort (copy-sequence annas-archive-supported-file-types) #'string<)))
 	       (y-or-n-p "No results found. Try again with all file types? "))
-      (unless (annas-archive-collect-results annars-archive-supported-file-types)
+      (unless (annas-archive-collect-results annas-archive-supported-file-types)
 	(message "No results found.")))))
 
+;; Replace the old collector with a version that uses the parsed types.
 (defun annas-archive-collect-results (&optional types)
-  "Collect the download URLs from the Anna’s Archive search results buffer.
-Only include links whose file types match TYPES if provided. If
-TYPES is nil, use `annas-archive-included-file-types'."
-  (save-window-excursion
-    (let* ((types (or types annas-archive-included-file-types))
-	   (regexp (mapconcat (lambda (extension)
-				"Generate a regexp matching any of the types in TYPES."
-				(concat "\\." extension))
-			      types "\\|"))
-	   links)
-      (dolist (cons (annas-archive-collect-links))
-	(when (string-match-p regexp (car cons))
-	  (push cons links)))
-      (when links
-	(let* ((selection (completing-read "Select a link: " links nil t))
-	       (url (alist-get selection links nil nil 'string=)))
-	  (add-hook 'eww-after-render-hook #'annas-archive-download-file)
-	  (eww url))))))
+  "Prompt for one result from the current Anna’s Archive results buffer and visit it.
+Only include links whose file types match TYPES (list of lowercase extensions).
+If TYPES is nil, use `annas-archive-included-file-types`."
+  (interactive)
+  (let* ((wanted (mapcar #'downcase (or types annas-archive-included-file-types)))
+         (results (annas-archive-parse-results))
+         (filtered (cl-remove-if-not
+                    (lambda (r) (member (plist-get r :type) wanted))
+                    results))
+         (cands (mapcar (lambda (r)
+                          (cons (format "%s — %s"
+                                        (plist-get r :title)
+                                        (upcase (or (plist-get r :type) "")))
+                                (plist-get r :url)))
+                        filtered)))
+    (if (null cands)
+        (user-error "No matching results for types: %s" wanted)
+      (let* ((choice (completing-read "Select a link: " (mapcar #'car cands) nil t))
+             (url    (cdr (assoc choice cands))))
+        (add-hook 'eww-after-render-hook #'annas-archive-download-file)
+        (eww url)))))
+
+(defun annas-archive--ext-from-block (beg end)
+  "Return lowercase file extension for the result block between BEG and END.
+Tries a filename line ending in .EXT first, then the “· EXT ·” token line."
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      ;; 1) Early filename line ending with .EXT (letters only, 2–6)
+      (let ((ext nil)
+            (lines-to-check 6))
+        (cl-dotimes (_ lines-to-check)
+          ;; Test the current line only.
+          (let ((line (buffer-substring-no-properties
+                       (line-beginning-position) (line-end-position))))
+            (when (string-match "\\.\\([[:alpha:]]\\{2,6\\}\\)[ \t]*\\'" line)
+              (setq ext (downcase (match-string 1 line)))
+              (cl-return)))
+          (forward-line 1))
+        (unless ext
+          ;; 2) Language/format line: “· EPUB ·”, “· PDF ·”, …
+          (goto-char (point-min))
+          (when (re-search-forward "·[ \t]*\\([A-Z]\\{3,6\\}\\)[ \t]*·" nil t)
+            (setq ext (downcase (match-string 1)))))
+        ext))))
+
+(defun annas-archive--exts-in-order ()
+  "Return a list of lowercase extensions, one per hit, in display order.
+We assume each result ‘card’ starts with a line that is exactly “*”."
+  (save-excursion
+    (goto-char (point-min))
+    (let (exts)
+      (while (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
+        (let ((block-beg (line-beginning-position))
+              (block-end (save-excursion
+                           (if (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
+                               (match-beginning 0)
+                             (point-max)))))
+          (push (annas-archive--ext-from-block block-beg block-end) exts)))
+      (nreverse exts))))
+
+(defun annas-archive-parse-results ()
+  "Parse the current Anna’s Archive results buffer.
+Return a list of plists: (:title TITLE :url URL :type EXT).
+TITLE is taken from the MD5 link whose visible text is not “*”.
+TYPE is a lowercase extension like \"pdf\" or \"epub\"."
+  (let* ((links (annas-archive-collect-links))  ;; existing helper in your file
+         (url->titles (make-hash-table :test 'equal))
+         (star-urls '()))
+    ;; Build (in-order) list of MD5 URLs as they appear via the leading “*” link
+    ;; and a map URL -> all visible titles used for that URL.
+    (dolist (cons links)
+      (let* ((raw-title (car cons))
+             (title (string-trim (if (stringp raw-title) raw-title "")))
+             (url   (cdr cons)))
+        (when (annas-archive--md5-url-p url)
+          (puthash url (cons title (gethash url url->titles)) url->titles)
+          (when (and (string= title "*")
+                     (not (member url star-urls)))
+            (setq star-urls (append star-urls (list url)))))))
+    ;; Extract types by scanning the buffer blocks in the same visual order.
+    (let ((exts (annas-archive--exts-in-order)))
+      ;; Pair URL, best title, and ext (lists must be same length; if not, we
+      ;; gracefully stop at the shortest).
+      (cl-mapcar
+       (lambda (url ext)
+         (let* ((cands (gethash url url->titles))
+                (best  (car (sort (cl-remove-if (lambda (s) (string= s "*")) cands)
+                                  (lambda (a b) (> (length a) (length b)))))))
+           (list :title (or best "*") :url url :type ext)))
+       star-urls exts))))
+
+(defun annas-archive--md5-url-p (url)
+  "Return non-nil if URL looks like an Anna’s Archive item (md5) page."
+  (and (stringp url)
+       (string-match-p "/md5/[0-9a-f]\\{8,\\}" url)))
 
 (defun annas-archive-collect-links ()
   "Get an alist of link titles and URLs for all links in the current `eww' buffer."
