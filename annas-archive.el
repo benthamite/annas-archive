@@ -27,6 +27,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
 ;;;; Variables
 
 ;;;;; Anna’s Archive
