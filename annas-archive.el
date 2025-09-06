@@ -207,11 +207,12 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 Each plist has keys :type, :size, :language, :year and :cover."
   (save-excursion
     (goto-char (point-min))
-    (let (info)
-      (while (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
+    (let ((regexp "^[ \t]*\\*[ \t]*$")
+	  info)
+      (while (re-search-forward regexp nil t)
 	(let ((block-beg (line-beginning-position))
 	      (block-end (save-excursion
-			   (if (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
+			   (if (re-search-forward regexp nil t)
 			       (match-beginning 0)
 			     (point-max)))))
 	  (push (list
