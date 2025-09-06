@@ -325,7 +325,7 @@ RESULTS is a list of plists with keys `:title', `:url', `:type', `:size',
 		   (size (or (plist-get r :size) ""))
 		   (year (or (plist-get r :year) ""))
 		   (lang (annas-archive--truncate (or (plist-get r :language) "") annas-archive-language-column-width))
-		   (disp (format (format "%%s  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
+		   (disp (format (format "%%s  %%-%ds  %%%ds  %%-%ds  %%-%ds"
 					 annas-archive-type-column-width
 					 annas-archive-size-column-width
 					 annas-archive-year-column-width
