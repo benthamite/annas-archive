@@ -111,6 +111,8 @@ downloaded with `eww', the destination path of the downloaded file as its second
 argument."
   :type 'hook)
 
+;;;;; Column widths
+
 (defcustom annas-archive-title-column-width 100
   "Width of the title column when displaying search results."
   :type 'integer
