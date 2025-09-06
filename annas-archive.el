@@ -78,11 +78,6 @@ nil, unfortunately."
   :type 'boolean
   :group 'annas-archive)
 
-(defcustom annas-archive-show-images t
-  "Whether to show images (book covers) in Anna’s Archive pages fetched with `eww'.
-If non-nil, temporarily set `shr-inhibit-images' to nil while fetching results."
-  :type 'boolean
-  :group 'annas-archive)
 
 (defcustom annas-archive-when-eww-download-fails 'external
   "What to do in the event of a failure to download the file with `eww'.
@@ -138,15 +133,14 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
 			 (t (read-string prompt))))
 	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
       (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
-      (let ((shr-inhibit-images (not annas-archive-show-images)))
-	(eww url)))))
+      (eww url))))
 
 ;;;;; Parsing
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
 Return a list of plists with bibliographic details for each hit.
-Each plist has keys :title, :url, :type, :size, :language, :year and :cover.
+Each plist has keys :title, :url, :type, :size, :language and :year.
 TITLE is taken from the MD5 link whose visible text is not “*”.
 TYPE is a lowercase extension like \"pdf\" or \"epub\"."
   (let* ((links (annas-archive-collect-links))  ;; existing helper in your file
@@ -173,9 +167,8 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 		(type  (plist-get info :type))
 		(size  (plist-get info :size))
 		(lang  (plist-get info :language))
-		(year  (plist-get info :year))
-		(cover (plist-get info :cover)))
-	   (list :title (or best "*") :url url :type type :size size :language lang :year year :cover cover)))
+		(year  (plist-get info :year)))
+	   (list :title (or best "*") :url url :type type :size size :language lang :year year)))
        star-urls infos))))
 
 (defun annas-archive-collect-links ()
@@ -225,8 +218,7 @@ Each plist has keys :type, :size, :language, :year and :cover."
 		 :type (annas-archive--ext-from-block  block-beg block-end)
 		 :size (annas-archive--size-from-block block-beg block-end)
 		 :language (annas-archive--language-from-block block-beg block-end)
-		 :year (annas-archive--year-from-block block-beg block-end)
-		 :cover (annas-archive--cover-from-block block-beg block-end))
+		 :year (annas-archive--year-from-block block-beg block-end))
 		info)))
       (nreverse info))))
 
@@ -284,25 +276,6 @@ Examples include “English [en]” or “English [en] · Latin [la]”."
       (when (re-search-forward "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·" nil t)
 	(match-string 1)))))
 
-(defun annas-archive--cover-from-block (beg end)
-  "Return cover image URL for the block between BEG and END, if any.
-Also search slightly before BEG to catch thumbnails placed to the left of the entry."
-  (or (annas-archive--cover-in-region beg end)
-      (let ((search-beg (max (point-min) (- beg 2000))))
-	(annas-archive--cover-in-region search-beg beg))))
-
-(defun annas-archive--cover-in-region (beg end)
-  "Return first cover image URL between BEG and END, if any."
-  (save-excursion
-    (save-restriction
-      (narrow-to-region beg end)
-      (goto-char (point-min))
-      (let ((url nil))
-	(while (and (not url) (< (point) (point-max)))
-	  (setq url (or (get-text-property (point) 'image-url)
-			(get-text-property (point) 'shr-image-url)))
-	  (goto-char (1+ (point))))
-	url))))
 
 ;;;;; Collection
 
@@ -328,9 +301,10 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 				 (size  (or (plist-get r :size) ""))
 				 (year  (or (plist-get r :year) ""))
 				 (lang  (annas-archive--truncate (or (plist-get r :language) "") lang-width)))
-			    (let ((disp (format (format "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
-							title-width type-width size-width year-width lang-width)
-						title type size year lang)))
+			    (let ((disp (format (format "%%s  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
+							type-width size-width year-width lang-width)
+						(annas-archive--truncate (plist-get r :title) title-width)
+						type size year lang)))
 			      (cons (propertize disp 'face 'fixed-pitch)
 				    (plist-get r :url)))))
 			filtered)))
@@ -342,10 +316,13 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 	(eww url)))))
 
 (defun annas-archive--truncate (str width)
-  "Return STR truncated to WIDTH characters, adding an ellipsis if needed."
-  (if (> (length str) width)
-      (concat (substring str 0 (- width 1)) "…")
-    str))
+  "Return STR rendered in exactly WIDTH columns, truncating with \"...\" if needed.
+Handles multi-width characters using `truncate-string-to-width' and pads with spaces."
+  (let* ((s (truncate-string-to-width (or str "") width nil nil "..."))
+	 (w (string-width s)))
+    (if (< w width)
+	(concat s (make-string (- width w) ?\s))
+      s)))
 
 ;;;;; Selection
 
