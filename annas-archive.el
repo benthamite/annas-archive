@@ -125,10 +125,11 @@ If STRING is nil, prompt for a search string. If both STRING and CONFIRM are
 non-nil, prompt the user for confirmation to use STRING as the search string."
   (interactive)
   (save-window-excursion
-    (let* ((string (cond ((and string confirm)
-			  (read-string "Search string: " string))
+    (let* ((prompt "Search string: ")
+	   (string (cond ((and string confirm)
+			  (read-string prompt string))
 			 (string string)
-			 (t (read-string "Search string: "))))
+			 (t (read-string prompt))))
 	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
       (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
       (eww url))))
