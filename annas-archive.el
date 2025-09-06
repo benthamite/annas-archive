@@ -137,7 +137,8 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
-Return a list of plists: (:title TITLE :url URL :type EXT).
+Return a list of plists with bibliographic details for each hit.
+Each plist has keys :title, :url, :type, :size, :language, :year and :cover.
 TITLE is taken from the MD5 link whose visible text is not “*”.
 TYPE is a lowercase extension like \"pdf\" or \"epub\"."
   (let* ((links (annas-archive-collect-links))  ;; existing helper in your file
@@ -156,15 +157,17 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 	    (setq star-urls (append star-urls (list url)))))))
     ;; Extract type and size by scanning the buffer blocks in the same visual order.
     (let ((infos (annas-archive--info-in-order)))
-      ;; Pair URL, best title, type and size; stop at shortest list if lengths differ.
       (cl-mapcar
        (lambda (url info)
 	 (let* ((cands (gethash url url->titles))
 		(best  (car (sort (cl-remove-if (lambda (s) (string= s "*")) cands)
 				  (lambda (a b) (> (length a) (length b))))))
-		(ext   (car info))
-		(size  (cdr info)))
-	   (list :title (or best "*") :url url :type ext :size size)))
+		(type  (plist-get info :type))
+		(size  (plist-get info :size))
+		(lang  (plist-get info :language))
+		(year  (plist-get info :year))
+		(cover (plist-get info :cover)))
+	   (list :title (or best "*") :url url :type type :size size :language lang :year year :cover cover)))
        star-urls infos))))
 
 (defun annas-archive-collect-links ()
@@ -199,7 +202,8 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
        (string-match-p "/md5/[0-9a-f]\\{8,\\}" url)))
 
 (defun annas-archive--info-in-order ()
-  "Return a list of cons cells (EXT . SIZE) in the visual order of the hits."
+  "Return a list of plists with details in the visual order of the hits.
+Each plist has keys :type, :size, :language, :year and :cover."
   (save-excursion
     (goto-char (point-min))
     (let (info)
@@ -209,9 +213,12 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 			   (if (re-search-forward "^[ \t]*\\*[ \t]*$" nil t)
 			       (match-beginning 0)
 			     (point-max)))))
-	  (push (cons
-		 (annas-archive--ext-from-block  block-beg block-end)
-		 (annas-archive--size-from-block block-beg block-end))
+	  (push (list
+		 :type (annas-archive--ext-from-block  block-beg block-end)
+		 :size (annas-archive--size-from-block block-beg block-end)
+		 :language (annas-archive--language-from-block block-beg block-end)
+		 :year (annas-archive--year-from-block block-beg block-end)
+		 :cover (annas-archive--cover-from-block block-beg block-end))
 		info)))
       (nreverse info))))
 
@@ -250,6 +257,38 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
 	     "\\([0-9]+\\(?:\\.[0-9]+\\)?[[:space:]]*[MGK]B\\)" nil t)
 	(string-trim (match-string 1))))))
 
+(defun annas-archive--language-from-block (beg end)
+  "Return language token(s) for the block between BEG and END.
+Examples include “English [en]” or “English [en] · Latin [la]”."
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      (when (re-search-forward "^[ \t]*\\([^·\n]+\\)[ \t]*·[ \t]*[A-Z]\\{3,6\\}[ \t]*·" nil t)
+	(string-trim (match-string 1))))))
+
+(defun annas-archive--year-from-block (beg end)
+  "Return publication year for the block between BEG and END, as a string."
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      (when (re-search-forward "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·" nil t)
+	(match-string 1)))))
+
+(defun annas-archive--cover-from-block (beg end)
+  "Return cover image URL for the block between BEG and END, if any."
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      (let ((url nil))
+	(while (and (not url) (< (point) (point-max)))
+	  (setq url (or (get-text-property (point) 'image-url)
+			(get-text-property (point) 'shr-image-url)))
+	  (goto-char (1+ (point))))
+	url))))
+
 ;;;;; Collection
 
 (defun annas-archive-collect-results (&optional types)
@@ -267,10 +306,12 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 			  (let* ((title (annas-archive--truncate
 					 (plist-get r :title) title-width))
 				 (type  (upcase (or (plist-get r :type) "")))
-				 (size  (or (plist-get r :size) "")))
-			    (cons (format (format "%%-%ds  %%-%ds  %%s"
-						  title-width 5)
-					  title type size)
+				 (size  (or (plist-get r :size) ""))
+				 (year  (or (plist-get r :year) ""))
+				 (lang  (or (plist-get r :language) "")))
+			    (cons (format (format "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%s"
+						  title-width 5 8 4 12)
+					  title type size year lang)
 				  (plist-get r :url))))
 			filtered)))
     (if (null cands)
