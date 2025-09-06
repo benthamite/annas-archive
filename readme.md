@@ -16,7 +16,7 @@ Clone this repository to your Emacs load path and add this to your `init.el` fil
 
 ### With `use-package`
 
-If you use `use-package`, add this to your `init.el` file:
+If you use `use-package`, add one of the following snippets to your `init.el` file:
 
 ```emacs-lisp
 ;; with vc
