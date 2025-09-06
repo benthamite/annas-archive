@@ -14,7 +14,7 @@ Clone this repository to your Emacs load path and add this to your `init.el` fil
 
 ### With `use-package`
 
-If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, add this to your `init.el` file:
+If you use `use-package`, add this to your `init.el` file:
 
 ```emacs-lisp
 ;; with vc
