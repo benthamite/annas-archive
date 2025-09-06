@@ -78,7 +78,6 @@ nil, unfortunately."
   :type 'boolean
   :group 'annas-archive)
 
-
 (defcustom annas-archive-when-eww-download-fails 'external
   "What to do in the event of a failure to download the file with `eww'.
 If `external' (default), download the file with the default browser. If `error',
@@ -143,7 +142,7 @@ Return a list of plists with bibliographic details for each hit.
 Each plist has keys :title, :url, :type, :size, :language and :year.
 TITLE is taken from the MD5 link whose visible text is not “*”.
 TYPE is a lowercase extension like \"pdf\" or \"epub\"."
-  (let* ((links (annas-archive-collect-links))  ;; existing helper in your file
+  (let* ((links (annas-archive-get-links))  ;; existing helper in your file
 	 (url->titles (make-hash-table :test 'equal))
 	 (star-urls '()))
     ;; Build (in-order) list of MD5 URLs as they appear via the leading “*” link
@@ -171,7 +170,7 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 	   (list :title (or best "*") :url url :type type :size size :language lang :year year)))
        star-urls infos))))
 
-(defun annas-archive-collect-links ()
+(defun annas-archive-get-links ()
   "Get an alist of link titles and URLs for all links in the current `eww' buffer."
   (save-excursion
     (goto-char (point-min))
@@ -277,7 +276,6 @@ Examples include “English [en]” or “English [en] · Latin [la]”."
       (when (re-search-forward "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·" nil t)
 	(match-string 1)))))
 
-
 ;;;;; Collection
 
 (defun annas-archive-collect-results (&optional types)
@@ -296,9 +294,7 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 	 (year-width 4)
 	 (lang-width 20)
 	 (cands (mapcar (lambda (r)
-			  (let* ((title (annas-archive--truncate
-					 (plist-get r :title) title-width))
-				 (type  (upcase (or (plist-get r :type) "")))
+			  (let* ((type  (upcase (or (plist-get r :type) "")))
 				 (size  (or (plist-get r :size) ""))
 				 (year  (or (plist-get r :year) ""))
 				 (lang  (annas-archive--truncate (or (plist-get r :language) "") lang-width)))
@@ -319,7 +315,8 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 (defun annas-archive--truncate (str width)
   "Return STR rendered in exactly WIDTH columns on a single line.
 Collapses internal whitespace, trims ends, and truncates with \"...\" if needed.
-Handles multi-width characters using `truncate-string-to-width' and pads with spaces."
+Handles multi-width characters using `truncate-string-to-width' and pads with
+spaces."
   (let* ((clean (replace-regexp-in-string "[ \t\n\r]+" " " (string-trim (or str ""))))
 	 (s (truncate-string-to-width clean width nil nil "..."))
 	 (w (string-width s)))
