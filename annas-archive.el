@@ -277,7 +277,14 @@ Examples include “English [en]” or “English [en] · Latin [la]”."
 	(match-string 1)))))
 
 (defun annas-archive--cover-from-block (beg end)
-  "Return cover image URL for the block between BEG and END, if any."
+  "Return cover image URL for the block between BEG and END, if any.
+Also search slightly before BEG to catch thumbnails placed to the left of the entry."
+  (or (annas-archive--cover-in-region beg end)
+      (let ((search-beg (max (point-min) (- beg 2000))))
+	(annas-archive--cover-in-region search-beg beg))))
+
+(defun annas-archive--cover-in-region (beg end)
+  "Return first cover image URL between BEG and END, if any."
   (save-excursion
     (save-restriction
       (narrow-to-region beg end)
@@ -302,15 +309,19 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 		    (lambda (r) (member (plist-get r :type) wanted))
 		    results))
 	 (title-width annas-archive-title-column-width)
+	 (type-width 5)
+	 (size-width 8)
+	 (year-width 4)
+	 (lang-width 20)
 	 (cands (mapcar (lambda (r)
 			  (let* ((title (annas-archive--truncate
 					 (plist-get r :title) title-width))
 				 (type  (upcase (or (plist-get r :type) "")))
 				 (size  (or (plist-get r :size) ""))
 				 (year  (or (plist-get r :year) ""))
-				 (lang  (or (plist-get r :language) "")))
-			    (cons (format (format "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%s"
-						  title-width 5 8 4 12)
+				 (lang  (annas-archive--truncate (or (plist-get r :language) "") lang-width)))
+			    (cons (format (format "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
+						  title-width type-width size-width year-width lang-width)
 					  title type size year lang)
 				  (plist-get r :url))))
 			filtered)))
