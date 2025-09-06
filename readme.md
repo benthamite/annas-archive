@@ -40,9 +40,9 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
 
 - `annas-archive-use-fast-download-links` (default: `nil`): If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.org/donate) is required.
 
-- `annas-archive-use-eww` (default: `nil`): If non-nil, the package will use the `eww` browser to download files in the background. Otherwise, the default browser will be used, and the user will need to download the file manually. If `annas-archive-use-fast-download-links` is non-nil, to use this option you must first authenticate by running `M-x annas-archive-authenticate`.
+- `annas-archive-use-eww` (default: `nil`): If non-nil, the package will use the `eww` browser to download files in the background. Otherwise, the default browser will be used, and the user will need to download the file manually. If `annas-archive-use-fast-download-links` is non-nil, to use this option you must first authenticate by running `M-x annas-archive-authenticate`. Note that if `annas-archive-use-fast-download-links` is nil, this option will have no effect, since slow download links are protected by a CAPTCHA which `eww` cannot handle.
 
-- `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww` (when `annas-archive-use-eww` is non-nil). If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently. Note that if `annas-archive-use-fast-download-links` is set to `nil`, the `eww` download may fail because Anna’s Archive sometimes requires ticking a confirmation page before it exposes the file URL, which can only be done in an external browser.
+- `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww` (when `annas-archive-use-eww` is non-nil). If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently.
 
 - `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. This user option is only relevant when `annas-archive-use-eww` is non-nil.
 

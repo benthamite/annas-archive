@@ -70,11 +70,10 @@ If non-nil, use fast download links available to paying members."
 (defcustom annas-archive-use-eww nil
   "Whether to use `eww' for downloading files.
 If non-nil, files will be downloaded directly with `eww'. If
-`annas-archive-use-fast-download-links' is non nil, you need to authenticate to
-be able to download the files with eww; run `annas-archive-authenticate'. NB:
-authentication has been working erratically, so if you are unable to
-authenticate and want to use fast download links, you may have to set this to
-nil, unfortunately."
+`annas-archive-use-fast-download-links' is non-nil, to use this option you must
+first authenticate by running `M-x annas-archive-authenticate'. Note that if
+`annas-archive-use-fast-download-links' is nil, this option will have no effect,
+since slow download links are protected by a CAPTCHA which `eww' cannot handle."
   :type 'boolean
   :group 'annas-archive)
 
@@ -379,9 +378,11 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 	  (message "Servers are not responding. Please try again later.")
 	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
 	  (if-let ((url (annas-archive-get-url-in-link (concat speed " partner server"))))
-	      (if annas-archive-use-eww
+	      (if (and annas-archive-use-eww (string= speed "fast"))
 		  (annas-archive-download-file-with-eww url speed)
-		(annas-archive-download-file-externally url))
+		(annas-archive-download-file-externally url)
+		(when (string= speed "slow")
+		  (message "Slow download links cannot be opened with `eww'. Downloading with the external browser.")))
 	    (annas-archive-handle-eww-failure (plist-get eww-data :url)))))
       (if interactive
 	  (message "File will be downloaded to `%s'" annas-archive-downloads-dir)
