@@ -48,12 +48,12 @@ This address changes regularly; to find the most recent URL, go to
   (concat annas-archive-home-url "md5/.*")
   "Regexp pattern for Anna’s Archive download page.")
 
-(defvar annas-archive-callback nil
-  "Callback function to run by `annas-archive-download-file'.")
-
 (defconst annas-archive-supported-file-types
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
   "List of supported file extensions.")
+
+(defvar annas-archive-callback nil
+  "Callback function to run by `annas-archive-download-file'.")
 
 ;;;; User options
 
@@ -255,7 +255,7 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
 (defun annas-archive-collect-results (&optional types)
   "Prompt for one result from the current Archive results buffer and visit it.
 Only include links whose file types match TYPES (list of lowercase extensions).
-If TYPES is nil, use `annas-archive-included-file-types`."
+If TYPES is nil, use `annas-archive-included-file-types'."
   (interactive)
   (let* ((wanted (mapcar #'downcase (or types annas-archive-included-file-types)))
 	 (results (annas-archive-parse-results))
