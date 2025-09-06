@@ -222,6 +222,33 @@ Each plist has keys :type, :size, :language and :year."
 		info)))
       (nreverse info))))
 
+;;;;;; Elements
+
+(defun annas-archive--match-in-block (beg end regexp group trim)
+  "Return first REGEXP GROUP between BEG and END, optionally trimmed.
+BEG and END delimit the search region. REGEXP is the pattern to search.
+GROUP is the capturing group number to return. If TRIM is non-nil, trim spaces."
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      (when (re-search-forward regexp nil t)
+	(let ((s (match-string group)))
+	  (if trim (string-trim s) s))))))
+
+(defun annas-archive--size-from-block (beg end)
+  "Return human-readable size string found between BEG and END, like “1.2 MB”."
+  (annas-archive--match-in-block beg end "\\([0-9]+\\(?:\\.[0-9]+\\)?[[:space:]]*[MGK]B\\)" 1 t))
+
+(defun annas-archive--language-from-block (beg end)
+  "Return language token(s) for the block between BEG and END.
+Examples include “English [en]” or “English [en] · Latin [la]”."
+  (annas-archive--match-in-block beg end "^[ \t]*\\([^·\n]+\\)[ \t]*·[ \t]*[A-Z]\\{3,6\\}[ \t]*·" 1 t))
+
+(defun annas-archive--year-from-block (beg end)
+  "Return publication year for the block between BEG and END, as a string."
+  (annas-archive--match-in-block beg end "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·" 1 nil))
+
 (defun annas-archive--ext-from-block (beg end)
   "Return lowercase file extension for the result block between BEG and END.
 Tries a filename line ending in .EXT first, then the “· EXT ·” token line."
@@ -246,31 +273,6 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
 	  (when (re-search-forward "·[ \t]*\\([A-Z]\\{3,6\\}\\)[ \t]*·" nil t)
 	    (setq ext (downcase (match-string 1)))))
 	ext))))
-
-(defun annas-archive--size-from-block (beg end)
-  "Return human-readable size string found between BEG and END, like “1.2 MB”."
-  (annas-archive--match-in-block beg end "\\([0-9]+\\(?:\\.[0-9]+\\)?[[:space:]]*[MGK]B\\)" 1 t))
-
-(defun annas-archive--language-from-block (beg end)
-  "Return language token(s) for the block between BEG and END.
-Examples include “English [en]” or “English [en] · Latin [la]”."
-  (annas-archive--match-in-block beg end "^[ \t]*\\([^·\n]+\\)[ \t]*·[ \t]*[A-Z]\\{3,6\\}[ \t]*·" 1 t))
-
-(defun annas-archive--year-from-block (beg end)
-  "Return publication year for the block between BEG and END, as a string."
-  (annas-archive--match-in-block beg end "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·" 1 nil))
-
-(defun annas-archive--match-in-block (beg end regexp group trim)
-  "Return first REGEXP GROUP between BEG and END, optionally trimmed.
-BEG and END delimit the search region. REGEXP is the pattern to search.
-GROUP is the capturing group number to return. If TRIM is non-nil, trim spaces."
-  (save-excursion
-    (save-restriction
-      (narrow-to-region beg end)
-      (goto-char (point-min))
-      (when (re-search-forward regexp nil t)
-	(let ((s (match-string group)))
-	  (if trim (string-trim s) s))))))
 
 ;;;;; Collection
 
