@@ -161,35 +161,13 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
   "Parse the current Anna’s Archive results buffer.
 Return a list of plists with bibliographic details for each hit.
 Each plist has keys :title, :url, :type, :size, :language and :year.
-TITLE is taken from the MD5 link whose visible text is not “*”.
+TITLE is taken from the MD5 link whose visible text is not \"*\".
 TYPE is a lowercase extension like \"pdf\" or \"epub\"."
-  (let* ((links (annas-archive-get-links))  ;; existing helper in your file
-	 (url->titles (make-hash-table :test 'equal))
-	 (star-urls '()))
-    ;; Build (in-order) list of MD5 URLs as they appear via the leading “*” link
-    ;; and a map URL -> all visible titles used for that URL.
-    (dolist (cons links)
-      (let* ((raw-title (car cons))
-	     (title (string-trim (if (stringp raw-title) raw-title "")))
-	     (url   (cdr cons)))
-	(when (annas-archive--md5-url-p url)
-	  (puthash url (cons title (gethash url url->titles)) url->titles)
-	  (when (and (string= title "*")
-		     (not (member url star-urls)))
-	    (setq star-urls (append star-urls (list url)))))))
-    ;; Extract type and size by scanning the buffer blocks in the same visual order.
-    (let ((infos (annas-archive--info-in-order)))
-      (cl-mapcar
-       (lambda (url info)
-	 (let* ((cands (gethash url url->titles))
-		(best  (car (sort (cl-remove-if (lambda (s) (string= s "*")) cands)
-				  (lambda (a b) (> (length a) (length b))))))
-		(type  (plist-get info :type))
-		(size  (plist-get info :size))
-		(lang  (plist-get info :language))
-		(year  (plist-get info :year)))
-	   (list :title (or best "*") :url url :type type :size size :language lang :year year)))
-       star-urls infos))))
+  (let* ((links (annas-archive-get-links))
+         (mappings (annas-archive--build-url-mappings links))
+         (url->titles (car mappings))
+         (star-urls (cdr mappings)))
+    (annas-archive--combine-url-info star-urls url->titles)))
 
 (defun annas-archive-get-links ()
   "Get an alist of link titles and URLs for all links in the current `eww' buffer."
@@ -216,6 +194,40 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 	  (setq end (next-single-property-change (point) 'shr-url)))
 	(goto-char (max end (1+ (point)))))  ;; ensure progress by moving at least one character forward
       (nreverse candidates))))
+
+(defun annas-archive--build-url-mappings (links)
+  "Build URL mappings from LINKS.
+Return a cons cell (URL->TITLES . STAR-URLS) where URL->TITLES is a hash table
+mapping URLs to lists of titles, and STAR-URLS is a list of URLs in order."
+  (let ((url->titles (make-hash-table :test 'equal))
+        (star-urls '()))
+    (dolist (cons links)
+      (let* ((raw-title (car cons))
+             (title (string-trim (if (stringp raw-title) raw-title "")))
+             (url   (cdr cons)))
+        (when (annas-archive--md5-url-p url)
+          (puthash url (cons title (gethash url url->titles)) url->titles)
+          (when (and (string= title "*")
+                     (not (member url star-urls)))
+            (setq star-urls (append star-urls (list url)))))))
+    (cons url->titles star-urls)))
+
+(defun annas-archive--combine-url-info (star-urls url->titles)
+  "Combine URL information with extracted metadata.
+STAR-URLS is a list of URLs and URL->TITLES is a hash table mapping URLs to
+titles."
+  (let ((infos (annas-archive--info-in-order)))
+    (cl-mapcar
+     (lambda (url info)
+       (let* ((cands (gethash url url->titles))
+              (best  (car (sort (cl-remove-if (lambda (s) (string= s "*")) cands)
+                                (lambda (a b) (> (length a) (length b))))))
+              (type  (plist-get info :type))
+              (size  (plist-get info :size))
+              (lang  (plist-get info :language))
+              (year  (plist-get info :year)))
+         (list :title (or best "*") :url url :type type :size size :language lang :year year)))
+     star-urls infos)))
 
 (defun annas-archive--md5-url-p (url)
   "Return non-nil if URL appears to be an Anna’s Archive item (md5) page."
