@@ -6,6 +6,8 @@
 
 ## Installation
 
+### Manual
+
 Clone this repository to your Emacs load path and add this to your `init.el` file:
 
 ```emacs-lisp
