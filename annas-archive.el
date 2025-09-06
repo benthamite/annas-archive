@@ -317,9 +317,11 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 	(eww url)))))
 
 (defun annas-archive--truncate (str width)
-  "Return STR rendered in exactly WIDTH columns, truncating with \"...\" if needed.
+  "Return STR rendered in exactly WIDTH columns on a single line.
+Collapses internal whitespace, trims ends, and truncates with \"...\" if needed.
 Handles multi-width characters using `truncate-string-to-width' and pads with spaces."
-  (let* ((s (truncate-string-to-width (or str "") width nil nil "..."))
+  (let* ((clean (replace-regexp-in-string "[ \t\n\r]+" " " (string-trim (or str ""))))
+	 (s (truncate-string-to-width clean width nil nil "..."))
 	 (w (string-width s)))
     (if (< w width)
 	(concat s (make-string (- width w) ?\s))
