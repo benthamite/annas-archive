@@ -116,6 +116,26 @@ argument."
   :type 'integer
   :group 'annas-archive)
 
+(defcustom annas-archive-type-column-width 5
+  "Width of the type column when displaying search results."
+  :type 'integer
+  :group 'annas-archive)
+
+(defcustom annas-archive-size-column-width 8
+  "Width of the size column when displaying search results."
+  :type 'integer
+  :group 'annas-archive)
+
+(defcustom annas-archive-year-column-width 4
+  "Width of the year column when displaying search results."
+  :type 'integer
+  :group 'annas-archive)
+
+(defcustom annas-archive-language-column-width 20
+  "Width of the language column when displaying search results."
+  :type 'integer
+  :group 'annas-archive)
+
 ;;;; Functions
 
 ;;;###autoload
@@ -286,29 +306,33 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 	 (filtered (cl-remove-if-not
 		    (lambda (r) (member (plist-get r :type) wanted))
 		    results))
-	 (title-width annas-archive-title-column-width)
-	 (type-width 5)
-	 (size-width 8)
-	 (year-width 4)
-	 (lang-width 20)
-	 (cands (mapcar (lambda (r)
-			  (let* ((type  (upcase (or (plist-get r :type) "")))
-				 (size  (or (plist-get r :size) ""))
-				 (year  (or (plist-get r :year) ""))
-				 (lang  (annas-archive--truncate (or (plist-get r :language) "") lang-width)))
-			    (let ((disp (format (format "%%s  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
-							type-width size-width year-width lang-width)
-						(annas-archive--truncate (plist-get r :title) title-width)
-						type size year lang)))
-			      (cons (propertize disp 'face 'fixed-pitch)
-				    (plist-get r :url)))))
-			filtered)))
+	 (cands (annas-archive--format-candidates filtered)))
     (if (null cands)
 	(user-error "No matching results for types: %s" wanted)
       (let* ((choice (completing-read "Select a link: " (mapcar #'car cands) nil t))
 	     (url    (cdr (assoc choice cands))))
 	(add-hook 'eww-after-render-hook #'annas-archive-download-file)
 	(eww url)))))
+
+(defun annas-archive--format-candidates (results)
+  "Return formatted candidates from RESULTS for completion.
+RESULTS is a list of plists with keys `:title', `:url', `:type', `:size',
+`:year' and `:language'."
+  (mapcar (lambda (r)
+	    (let* ((type (upcase (or (plist-get r :type) "")))
+		   (size (or (plist-get r :size) ""))
+		   (year (or (plist-get r :year) ""))
+		   (lang (annas-archive--truncate (or (plist-get r :language) "") annas-archive-language-column-width))
+		   (disp (format (format "%%s  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
+					 annas-archive-type-column-width
+					 annas-archive-size-column-width
+					 annas-archive-year-column-width
+					 annas-archive-language-column-width)
+				 (annas-archive--truncate (plist-get r :title) annas-archive-title-column-width)
+				 type size year lang)))
+	      (cons (propertize disp 'face 'fixed-pitch)
+		    (plist-get r :url))))
+	  results))
 
 (defun annas-archive--truncate (str width)
   "Return STR rendered in exactly WIDTH columns on a single line.
