@@ -12,9 +12,9 @@ Clone this repository to your Emacs load path and add this to your `init.el` fil
 (require 'annas-archive)
 ```
 
-### With `use-pacakge`
+### With `use-package`
 
-If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, add this your `init.el` file:
+If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, add this to your `init.el` file:
 
 ```emacs-lisp
 ;; with vc
@@ -51,6 +51,10 @@ If you use the [elpaca](https://github.com/progfolio/elpaca) package manager, ad
 - `annas-archive-post-download-hook` (default: `nil`): Hook run after downloading a file from Anna’s Archive. The hook is run with the url as its first argument and, when the file was downloaded with `eww`, the destination path of the downloaded file as its second argument.
 
 - `annas-archive-title-column-width` (default: `100`): Width of the title column when displaying search results.
+- `annas-archive-type-column-width` (default: `5`): Width of the type column when displaying search results.
+- `annas-archive-size-column-width` (default: `8`): Width of the size column when displaying search results.
+- `annas-archive-year-column-width` (default: `4`): Width of the year column when displaying search results.
+- `annas-archive-language-column-width` (default: `20`): Width of the language column when displaying search results.
 
 Here’s an example from my personal configuration, using elpaca:
 
@@ -81,7 +85,7 @@ The function `annas-archive-process-download` makes use of my extensions for `Eb
 
 ## Usage
 
-`M-x annas-archive-download` followed by the search string (e.g. book title or ISBN).
+`M-x annas-archive-download` followed by the search string (e.g. book title or ISBN). The results list shows fixed-pitch, aligned columns: Title, Type, Size, Year and Language (when available). Column widths are configurable via the corresponding user options.
 
 ## Troubleshooting
 
