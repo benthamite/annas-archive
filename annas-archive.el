@@ -78,6 +78,12 @@ nil, unfortunately."
   :type 'boolean
   :group 'annas-archive)
 
+(defcustom annas-archive-show-images t
+  "Whether to show images (book covers) in Anna’s Archive pages fetched with `eww'.
+If non-nil, temporarily set `shr-inhibit-images' to nil while fetching results."
+  :type 'boolean
+  :group 'annas-archive)
+
 (defcustom annas-archive-when-eww-download-fails 'external
   "What to do in the event of a failure to download the file with `eww'.
 If `external' (default), download the file with the default browser. If `error',
@@ -132,7 +138,8 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
 			 (t (read-string prompt))))
 	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
       (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
-      (eww url))))
+      (let ((shr-inhibit-images (not annas-archive-show-images)))
+	(eww url)))))
 
 ;;;;; Parsing
 
@@ -321,10 +328,11 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 				 (size  (or (plist-get r :size) ""))
 				 (year  (or (plist-get r :year) ""))
 				 (lang  (annas-archive--truncate (or (plist-get r :language) "") lang-width)))
-			    (cons (format (format "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
-						  title-width type-width size-width year-width lang-width)
-					  title type size year lang)
-				  (plist-get r :url))))
+			    (let ((disp (format (format "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%-%ds"
+							title-width type-width size-width year-width lang-width)
+						title type size year lang)))
+			      (cons (propertize disp 'face 'fixed-pitch)
+				    (plist-get r :url)))))
 			filtered)))
     (if (null cands)
 	(user-error "No matching results for types: %s" wanted)
