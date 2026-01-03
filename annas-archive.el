@@ -34,7 +34,7 @@
 ;;;;; Anna’s Archive
 
 (defconst annas-archive-home-url
-  "https://annas-archive.org/"
+  "https://annas-archive.li/"
   "URL to Anna’s Archive.
 This address changes regularly; to find the most recent URL, go to
 <https://en.wikipedia.org/wiki/Anna%27s_Archive> and get the link under
