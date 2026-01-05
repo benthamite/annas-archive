@@ -2,7 +2,7 @@
 
 ## Introduction
 
-`annas-archive` provides rudimentary Emacs integration for [Anna’s Archive](https://annas-archive.org/), the largest existing search engine for shadow libraries.
+`annas-archive` provides rudimentary Emacs integration for [Anna’s Archive](https://annas-archive.li/), the largest existing search engine for shadow libraries.
 
 ## Installation
 
@@ -38,7 +38,7 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
 
 ## Configuration
 
-- `annas-archive-use-fast-download-links` (default: `nil`): If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.org/donate) is required.
+- `annas-archive-use-fast-download-links` (default: `nil`): If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.li/donate) is required.
 
 - `annas-archive-use-eww` (default: `nil`): If non-`nil`, the package will use the `eww` browser to download files in the background. Otherwise, the default browser will be used, and the user will need to download the file manually. If `annas-archive-use-fast-download-links` is non-`nil`, to use this option you must first authenticate by running `M-x annas-archive-authenticate`. Note that if `annas-archive-use-fast-download-links` is `nil`, this option will have no effect, since slow download links are protected by a CAPTCHA which `eww` cannot handle.
 
