@@ -55,6 +55,28 @@ This address changes regularly; to find the most recent URL, go to
 (defvar annas-archive-callback nil
   "Callback function to run by `annas-archive-download-file'.")
 
+;;;;; Regexps
+
+(defconst annas-archive--re-size
+  "\\([0-9]+\\(?:\\.[0-9]+\\)?[[:space:]]*[MGK]B\\)"
+  "Regexp matching a human-readable size like \"1.2 MB\" in a block.")
+
+(defconst annas-archive--re-language
+  "^[ \t]*\\([^·\n]+\\)[ \t]*·[ \t]*[A-Z]\\{3,6\\}[ \t]*·"
+  "Regexp matching the language token line in a block.")
+
+(defconst annas-archive--re-year
+  "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·"
+  "Regexp matching the publication year token in a block.")
+
+(defconst annas-archive--re-ext-from-filename
+  "\\.\\([[:alpha:]]\\{2,6\\}\\)[ \t]*\\'"
+  "Regexp matching a filename-ending extension like \".epub\".")
+
+(defconst annas-archive--re-ext-from-token
+  "·[ \t]*\\([A-Z]\\{3,6\\}\\)[ \t]*·"
+  "Regexp matching an uppercase extension token like \"· EPUB ·\".")
+
 ;;;; User options
 
 (defgroup annas-archive ()
@@ -273,16 +295,16 @@ GROUP is the capturing group number to return. If TRIM is non-nil, trim spaces."
 
 (defun annas-archive--size-from-block (beg end)
   "Return human-readable size string found between BEG and END, like “1.2 MB”."
-  (annas-archive--match-in-block beg end "\\([0-9]+\\(?:\\.[0-9]+\\)?[[:space:]]*[MGK]B\\)" 1 t))
+  (annas-archive--match-in-block beg end annas-archive--re-size 1 t))
 
 (defun annas-archive--language-from-block (beg end)
   "Return language token(s) for the block between BEG and END.
 Examples include “English [en]” or “English [en] · Latin [la]”."
-  (annas-archive--match-in-block beg end "^[ \t]*\\([^·\n]+\\)[ \t]*·[ \t]*[A-Z]\\{3,6\\}[ \t]*·" 1 t))
+  (annas-archive--match-in-block beg end annas-archive--re-language 1 t))
 
 (defun annas-archive--year-from-block (beg end)
   "Return publication year for the block between BEG and END, as a string."
-  (annas-archive--match-in-block beg end "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·" 1 nil))
+  (annas-archive--match-in-block beg end annas-archive--re-year 1 nil))
 
 (defun annas-archive--ext-from-block (beg end)
   "Return lowercase file extension for the result block between BEG and END.
@@ -293,21 +315,21 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
       (goto-char (point-min))
       ;; 1) Early filename line ending with .EXT (letters only, 2–6)
       (let ((ext nil)
-	    (lines-to-check 6))
-	(cl-dotimes (_ lines-to-check)
-	  ;; Test the current line only.
-	  (let ((line (buffer-substring-no-properties
-		       (line-beginning-position) (line-end-position))))
-	    (when (string-match "\\.\\([[:alpha:]]\\{2,6\\}\\)[ \t]*\\'" line)
-	      (setq ext (downcase (match-string 1 line)))
-	      (cl-return)))
-	  (forward-line 1))
-	(unless ext
-	  ;; 2) Language/format line: “· EPUB ·”, “· PDF ·”, …
-	  (goto-char (point-min))
-	  (when (re-search-forward "·[ \t]*\\([A-Z]\\{3,6\\}\\)[ \t]*·" nil t)
-	    (setq ext (downcase (match-string 1)))))
-	ext))))
+            (lines-to-check 6))
+        (cl-dotimes (_ lines-to-check)
+          ;; Test the current line only.
+          (let ((line (buffer-substring-no-properties
+                       (line-beginning-position) (line-end-position))))
+            (when (string-match annas-archive--re-ext-from-filename line)
+              (setq ext (downcase (match-string 1 line)))
+              (cl-return)))
+          (forward-line 1))
+        (unless ext
+          ;; 2) Language/format line: “· EPUB ·”, “· PDF ·”, …
+          (goto-char (point-min))
+          (when (re-search-forward annas-archive--re-ext-from-token nil t)
+            (setq ext (downcase (match-string 1)))))
+        ext))))
 
 ;;;;; Collection
 
