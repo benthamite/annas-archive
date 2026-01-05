@@ -46,7 +46,7 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
 
 - `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. This user option is only relevant when `annas-archive-use-eww` is non-`nil`.
 
-- `annas-archive-included-file-types`: The list of file extensions to include in search results. By default, all supported file extensions are included.
+- `annas-archive-included-file-types`: The list of file extensions to include in search results. By default, all supported file extensions are included. (To see the list of supported file types, see the variable `annas-archive-supported-file-types`.)
 
 - `annas-archive-retry-with-all-file-types` (default: `t`): Whether to try the search again with all supported file types when the search restricted to `annas-archive-included-file-types` returns no results.
 
