@@ -87,7 +87,7 @@ The function `annas-archive-process-download` makes use of my extensions for `Eb
 
 ## Usage
 
-`M-x annas-archive-download` followed by the search string (e.g. book title or ISBN). The results list shows fixed-pitch, aligned columns: Title, Type, Size, Year and Language (when available). Column widths are configurable via the corresponding user options.
+`M-x annas-archive-download` followed by the search string (e.g. book title or ISBN).
 
 ## Troubleshooting
 
