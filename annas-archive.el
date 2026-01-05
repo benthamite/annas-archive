@@ -509,14 +509,14 @@ externally, signal an error, or fail silently."
 (defun annas-archive-get-authentication-details ()
   "Return user authentication details from Anna’s Archive."
   (remove-hook 'eww-after-render-hook #'annas-archive-get-authentication-details)
-  (let (id key)
+  (let (id)
     (goto-char (point-min))
     (re-search-forward "Account ID: \\(.*\\)" nil t)
     (setq id (match-string 1))
     (re-search-forward "Secret key (don’t share!): show\\(.*\\)" nil t)
-    (setq key (match-string 1))
-    (if (and id key)
-	(message "You are authenticated.\nAccount ID: %s\nSecret key: %s" id key)
+    (if id
+	(message "You are authenticated.\nAccount ID: %s\nTo see your secret key, visit %s"
+		 id annas-archive-auth-url)
       (eww annas-archive-auth-url)
       (message "You don't seem to be authenticated. Please enter your key in the `eww' buffer."))))
 
