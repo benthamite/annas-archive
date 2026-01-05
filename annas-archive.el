@@ -61,6 +61,8 @@ This address changes regularly; to find the most recent URL, go to
   "Rudimentary integration for Anna’s Archive."
   :group 'emacs)
 
+;;;;; Main options
+
 (defcustom annas-archive-use-fast-download-links nil
   "Whether to use fast download links from Anna’s Archive.
 If non-nil, use fast download links available to paying members."
