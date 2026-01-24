@@ -204,19 +204,17 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 	      (text-property-any (point) (point-max) 'shr-url nil)))
       (while (setq beg (text-property-not-all end (point-max) 'shr-url nil))
 	(goto-char beg)
-	;; Skip newlines which might precede the link text
 	(skip-chars-forward "\n")
 	(setq beg (point))
 	(if (get-text-property (point) 'shr-url)
 	    (progn
 	      (setq end (next-single-property-change (point) 'shr-url nil (point-max)))
-	      ;; Handle when link is at the end of the buffer
 	      (unless end
 		(setq end (point-max)))
 	      (push (cons (buffer-substring-no-properties beg end) (get-text-property beg 'shr-url))
 		    candidates))
 	  (setq end (next-single-property-change (point) 'shr-url)))
-	(goto-char (max end (1+ (point)))))  ;; ensure progress by moving at least one character forward
+	(goto-char (max end (1+ (point)))))
       (nreverse candidates))))
 
 (defun annas-archive--build-url-mappings (links)
@@ -313,11 +311,9 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
     (save-restriction
       (narrow-to-region beg end)
       (goto-char (point-min))
-      ;; 1) Early filename line ending with .EXT (letters only, 2–6)
       (let ((ext nil)
             (lines-to-check 6))
         (cl-dotimes (_ lines-to-check)
-          ;; Test the current line only.
           (let ((line (buffer-substring-no-properties
                        (line-beginning-position) (line-end-position))))
             (when (string-match annas-archive--re-ext-from-filename line)
@@ -325,7 +321,6 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
               (cl-return)))
           (forward-line 1))
         (unless ext
-          ;; 2) Language/format line: “· EPUB ·”, “· PDF ·”, …
           (goto-char (point-min))
           (when (re-search-forward annas-archive--re-ext-from-token nil t)
             (setq ext (downcase (match-string 1)))))
