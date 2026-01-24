@@ -177,9 +177,16 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
 			 (t (read-string prompt))))
 	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
       (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
-      (eww url))))
+      (eww url)
+      (annas-archive--kill-eww-buffers))))
 
 ;;;;; Parsing
+
+(defun annas-archive--kill-eww-buffers ()
+  "Kill all `eww' buffers."
+  (dolist (buffer (buffer-list))
+    (when (with-current-buffer buffer (derived-mode-p 'eww-mode))
+      (kill-buffer buffer))))
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
