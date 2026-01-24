@@ -4,6 +4,8 @@
 
 `annas-archive` provides rudimentary Emacs integration for [Anna’s Archive](https://annas-archive.li/), the largest existing search engine for shadow libraries.
 
+![Demo](demo.gif)
+
 ## Installation
 
 ### Manual
