@@ -52,9 +52,6 @@ This address changes regularly; to find the most recent URL, go to
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
   "List of supported file extensions.")
 
-(defvar annas-archive-callback nil
-  "Callback function to run by `annas-archive-download-file'.")
-
 ;;;;; Regexps
 
 (defconst annas-archive--re-size
@@ -170,23 +167,19 @@ argument."
 ;;;; Functions
 
 ;;;###autoload
-(defun annas-archive-download (&optional string confirm)
+(defun annas-archive-download (&optional string)
   "Search Anna’s Archive for STRING and download the selected item.
 STRING can be a descriptive text (such as the book’s title), an ISBN or (for
 papers) a DOI.
 
-If STRING is nil, prompt for a search string. If both STRING and
-CONFIRM are non-nil, prompt the user for confirmation to use STRING as the
-search string.
-
-If STRING is a DOI, open the corresponding SciDB page and proceed to download."
+When called interactively, always prompt for STRING. When called
+non-interactively, never prompt; signal an error if STRING is nil or empty."
   (interactive)
   (save-window-excursion
     (let* ((prompt "Search string: ")
-	   (string (cond ((and string confirm)
-			  (read-string prompt string))
-			 (string string)
-			 (t (read-string prompt))))
+	   (string (if (called-interactively-p 'interactive)
+		       (read-string prompt)
+		     (annas-archive--require-nonempty-string string)))
 	   (url (annas-archive--url-for-query string)))
       (add-hook 'eww-after-render-hook
 		(if (annas-archive--doi-p string)
@@ -201,6 +194,14 @@ If STRING is a DOI, open the corresponding SciDB page and proceed to download."
 STRING is the user input, typically a DOI like \"10.1145/1458082.1458150\"."
   (and (stringp string)
        (string-match-p annas-archive--doi-regexp (upcase (string-trim string)))))
+
+(defun annas-archive--require-nonempty-string (string)
+  "Return STRING trimmed, or signal an error if it is nil or empty.
+STRING is the user input."
+  (let ((s (string-trim (or string ""))))
+    (if (string-empty-p s)
+	(user-error "STRING must be non-empty when called non-interactively")
+      s)))
 
 (defun annas-archive--url-for-query (string)
   "Return the Anna’s Archive URL to use for STRING.
@@ -534,13 +535,14 @@ REDIRECT is the final URL (a string) reported by `url-retrieve'."
   "Take appropriate action when `eww' fails to download file from URL.
 Depending on the value of `annas-archive-when-eww-download-fails', download
 externally, signal an error, or fail silently."
-  (let ((message "Failed to download file with `eww'."))
+  (let ((message "Failed to download file with `eww'"))
     (pcase annas-archive-when-eww-download-fails
       ('external
        (annas-archive-download-file-externally url)
-       (message (concat message " Downloading with the default browser instead.")))
+       (message (concat message " Downloading with the default browser instead")))
       ('error (user-error message))
       (_ (message message)))))
+
 
 ;;;;; Authentication
 
