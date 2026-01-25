@@ -64,8 +64,8 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
 
 Run `M-x annas-archive-download` and enter either:
 
-- A regular search string (e.g. book title or ISBN), or
-- A DOI (e.g. `10.1145/1458082.1458150`) to open the corresponding SciDB page and download the paper.
+- An ISBN or search string (e.g. title and/or author) (for books)
+- A DOI (for papers).
 
 ## Troubleshooting
 
