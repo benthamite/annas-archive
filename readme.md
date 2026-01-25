@@ -89,7 +89,10 @@ The function `annas-archive-process-download` makes use of my extensions for `Eb
 
 ## Usage
 
-`M-x annas-archive-download` followed by the search string (e.g. book title or ISBN).
+Run `M-x annas-archive-download` and enter either:
+
+- A regular search string (e.g. book title or ISBN), or
+- A DOI (e.g. `10.1145/1458082.1458150`) to open the corresponding SciDB page and download the paper.
 
 ## Troubleshooting
 
