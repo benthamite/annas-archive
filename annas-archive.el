@@ -188,16 +188,9 @@ If STRING is a DOI, open the corresponding SciDB page and proceed to download."
 		(if (annas-archive--doi-p string)
 		    #'annas-archive-download-file
 		  #'annas-archive-select-and-open-url))
-      (eww url)
-      (annas-archive--kill-eww-buffers))))
+      (eww url))))
 
 ;;;;; Parsing
-
-(defun annas-archive--kill-eww-buffers ()
-  "Kill all `eww' buffers."
-  (dolist (buffer (buffer-list))
-    (when (with-current-buffer buffer (derived-mode-p 'eww-mode))
-      (kill-buffer buffer))))
 
 (defun annas-archive--doi-p (string)
   "Return non-nil if STRING is a valid DOI.
