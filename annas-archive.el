@@ -45,7 +45,7 @@ This address changes regularly; to find the most recent URL, go to
   "URL to authenticate with Anna’s Archive.")
 
 (defconst annas-archive-download-url-pattern
-  (concat annas-archive-home-url "md5/.*")
+  (concat annas-archive-home-url "\\(?:md5\\|scidb\\)/.*")
   "Regexp pattern for Anna’s Archive download page.")
 
 (defconst annas-archive-supported-file-types
@@ -76,6 +76,12 @@ This address changes regularly; to find the most recent URL, go to
 (defconst annas-archive--re-ext-from-token
   "·[ \t]*\\([A-Z]\\{3,6\\}\\)[ \t]*·"
   "Regexp matching an uppercase extension token like \"· EPUB ·\".")
+
+;;;;; DOIs
+
+(defconst annas-archive--doi-regexp
+  "\\(10\\.[0-9]\\{4,9\\}\\(/\\)[-._;()/:A-Z0-9]+\\)$"
+  "Regular expression that matches a DOI.")
 
 ;;;; User options
 
@@ -167,7 +173,9 @@ argument."
 (defun annas-archive-download (&optional string confirm)
   "Search Anna’s Archive for STRING and download the selected item.
 If STRING is nil, prompt for a search string. If both STRING and CONFIRM are
-non-nil, prompt the user for confirmation to use STRING as the search string."
+non-nil, prompt the user for confirmation to use STRING as the search string.
+
+If STRING is a DOI, open the corresponding SciDB page and proceed to download."
   (interactive)
   (save-window-excursion
     (let* ((prompt "Search string: ")
@@ -175,8 +183,11 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
 			  (read-string prompt string))
 			 (string string)
 			 (t (read-string prompt))))
-	   (url (concat annas-archive-home-url "search?q=" (url-encode-url string))))
-      (add-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
+	   (url (annas-archive--url-for-query string)))
+      (add-hook 'eww-after-render-hook
+		(if (annas-archive--doi-p string)
+		    #'annas-archive-download-file
+		  #'annas-archive-select-and-open-url))
       (eww url)
       (annas-archive--kill-eww-buffers))))
 
@@ -187,6 +198,20 @@ non-nil, prompt the user for confirmation to use STRING as the search string."
   (dolist (buffer (buffer-list))
     (when (with-current-buffer buffer (derived-mode-p 'eww-mode))
       (kill-buffer buffer))))
+
+(defun annas-archive--doi-p (string)
+  "Return non-nil if STRING is a valid DOI.
+STRING is the user input, typically a DOI like \"10.1145/1458082.1458150\"."
+  (and (stringp string)
+       (string-match-p annas-archive--doi-regexp (upcase (string-trim string)))))
+
+(defun annas-archive--url-for-query (string)
+  "Return the Anna’s Archive URL to use for STRING.
+If STRING is a DOI, return the SciDB URL. Otherwise, return the search URL."
+  (let ((s (string-trim (or string ""))))
+    (if (annas-archive--doi-p s)
+	(concat annas-archive-home-url "scidb/" s)
+      (concat annas-archive-home-url "search?q=" (url-encode-url s)))))
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
@@ -403,7 +428,7 @@ spaces."
 (defvar eww-data)
 (autoload 'browse-url-default-browser "browse-url")
 (defun annas-archive-download-file (&optional interactive)
-  "Download the PDF in the current eww buffer page.
+  "Download the file in the current eww buffer page.
 If called interactively, or INTERACTIVE is non-nil, display a message indicating
 where the file will be downloaded. Otherwise, kill the eww buffer."
   (interactive "p")
@@ -415,7 +440,8 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
       (if (re-search-forward "Our servers are not responding" nil t)
 	  (message "Servers are not responding. Please try again later.")
 	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
-	  (if-let ((url (annas-archive-get-url-in-link (concat speed " partner server"))))
+	  (if-let ((url (or (annas-archive-get-url-in-link "Download")
+			    (annas-archive-get-url-in-link (concat speed " partner server")))))
 	      (if (and annas-archive-use-eww (string= speed "fast"))
 		  (annas-archive-download-file-with-eww url speed)
 		(annas-archive-download-file-externally url)
