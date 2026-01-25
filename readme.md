@@ -38,6 +38,13 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
   :quelpa (annas-archive :fetcher github :repo "benthamite/annas-archive"))
 ```
 
+## Usage
+
+Run `M-x annas-archive-download` and enter either:
+
+- An ISBN or search string (e.g. title and/or author) (for books)
+- A DOI (for papers).
+
 ## Configuration
 
 - `annas-archive-use-fast-download-links` (default: `nil`): If non-nil, the package will use the fast download links provided by Anna’s Archive. To use such links, a [membership](https://annas-archive.li/donate) is required.
@@ -59,13 +66,6 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
 - `annas-archive-size-column-width` (default: `8`): Width of the size column when displaying search results.
 - `annas-archive-year-column-width` (default: `4`): Width of the year column when displaying search results.
 - `annas-archive-language-column-width` (default: `20`): Width of the language column when displaying search results.
-
-## Usage
-
-Run `M-x annas-archive-download` and enter either:
-
-- An ISBN or search string (e.g. title and/or author) (for books)
-- A DOI (for papers).
 
 ## Troubleshooting
 
