@@ -60,33 +60,6 @@ If you use `use-package`, add one of the following snippets to your `init.el` fi
 - `annas-archive-year-column-width` (default: `4`): Width of the year column when displaying search results.
 - `annas-archive-language-column-width` (default: `20`): Width of the language column when displaying search results.
 
-Here’s an example from my personal configuration, using elpaca:
-
-```emacs-lisp
-(use-package annas-archive
-  :ensure (:host github
-		 :repo "benthamite/annas-archive")
-  :custom
-  (annas-archive-included-file-types '("pdf"))
-  (annas-archive-use-fast-download-links t)
-  (annas-archive-use-eww t)
-
-  :config
-  (defun annas-archive-process-download (url &optional file)
-	"Process downloaded FILE from URL in Anna's Archive."
-	(when-let ((key ebib-extras-attach-file-key))
-	  (setq ebib-extras-attach-file-key nil)
-	  (if annas-archive-use-eww
-	  (ebib-extras-attach-file file key)
-	(message "Save the file that opens in your browser (%s) and attach it to the relevant Ebib entry (%s)"
-		 url key))))
-
-  :hook
-  (annas-archive-post-download-hook . annas-archive-process-download))
-```
-
-The function `annas-archive-process-download` makes use of my extensions for `Ebib`, a bibliography manager. It allows me to search the Anna’s Archive database with a default string obtained from the Ebib entry at point, and then, if `annas-archive-use-eww` is set to `t`, attach the downloaded file to that entry—all without having to leave Emacs.
-
 ## Usage
 
 Run `M-x annas-archive-download` and enter either:
