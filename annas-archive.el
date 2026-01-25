@@ -172,8 +172,12 @@ argument."
 ;;;###autoload
 (defun annas-archive-download (&optional string confirm)
   "Search Anna’s Archive for STRING and download the selected item.
-If STRING is nil, prompt for a search string. If both STRING and CONFIRM are
-non-nil, prompt the user for confirmation to use STRING as the search string.
+STRING can be a descriptive text (such as the book’s title), an ISBN or (for
+papers) a DOI.
+
+If STRING is nil, prompt for a search string. If both STRING and
+CONFIRM are non-nil, prompt the user for confirmation to use STRING as the
+search string.
 
 If STRING is a DOI, open the corresponding SciDB page and proceed to download."
   (interactive)
@@ -492,7 +496,8 @@ URL is the download URL passed to `url-retrieve'."
     (if-let ((err (plist-get status :error)))
 	(message "Download failed: %s" err)
       (let* ((redirect (plist-get status :redirect))
-	     (extension (and (stringp redirect) (file-name-extension redirect)))
+	     (extension (or (annas-archive--extension-from-redirect redirect)
+			    (annas-archive--extension-from-headers)))
 	     (base (make-temp-name "downloaded-from-annas-archive-"))
 	     (filename (if extension
 			   (file-name-with-extension base extension)
@@ -501,6 +506,23 @@ URL is the download URL passed to `url-retrieve'."
 	(if (and (stringp path) (not (string-empty-p path)))
 	    (annas-archive-save-file url path)
 	  (annas-archive-handle-eww-failure url))))))
+
+(defun annas-archive--extension-from-redirect (redirect)
+  "Return a file extension inferred from REDIRECT.
+REDIRECT is the final URL (a string) reported by `url-retrieve'."
+  (when (stringp redirect)
+    (file-name-extension redirect)))
+
+(defun annas-archive--extension-from-headers ()
+  "Return a file extension inferred from the current buffer’s HTTP headers."
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward "^Content-Type:[ \t]*\\([^;\n]+\\)" nil t)
+      (pcase (downcase (string-trim (match-string 1)))
+	("application/pdf" "pdf")
+	("application/epub+zip" "epub")
+	("text/plain" "txt")
+	(_ nil)))))
 
 (defun annas-archive-save-file (url path)
   "Save the file at URL to PATH."
