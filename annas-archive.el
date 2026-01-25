@@ -485,19 +485,22 @@ URL is the URL of the download link."
     found-url))
 
 (defun annas-archive-eww-download-file-callback (url)
-  "Callback function for run after downloading file in URL with `eww'."
+  "Return a callback for saving the file downloaded from URL with `eww'.
+URL is the download URL passed to `url-retrieve'."
   (lambda (status)
     "STATUS is the status of the download process; see `url-retrieve' for details."
     (if-let ((err (plist-get status :error)))
 	(message "Download failed: %s" err)
-      (if-let* ((extension (file-name-extension (plist-get status :redirect)))
-		(base (make-temp-name "downloaded-from-annas-archive-"))
-		(filename (if extension
-			      (file-name-with-extension base extension)
-			    base))
-		(path (file-name-concat annas-archive-downloads-dir filename)))
-	  (annas-archive-save-file url path)
-	(annas-archive-handle-eww-failure url)))))
+      (let* ((redirect (plist-get status :redirect))
+	     (extension (and (stringp redirect) (file-name-extension redirect)))
+	     (base (make-temp-name "downloaded-from-annas-archive-"))
+	     (filename (if extension
+			   (file-name-with-extension base extension)
+			 base))
+	     (path (file-name-concat annas-archive-downloads-dir filename)))
+	(if (and (stringp path) (not (string-empty-p path)))
+	    (annas-archive-save-file url path)
+	  (annas-archive-handle-eww-failure url))))))
 
 (defun annas-archive-save-file (url path)
   "Save the file at URL to PATH."
