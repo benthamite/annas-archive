@@ -498,11 +498,11 @@ URL is the download URL passed to `url-retrieve'."
 	(message "Download failed: %s" err)
       (let* ((redirect (plist-get status :redirect))
 	     (extension (or (annas-archive--extension-from-redirect redirect)
-			    (annas-archive--extension-from-headers)))
+			    (annas-archive--extension-from-headers)
+			    (annas-archive--extension-from-url url)
+			    "pdf"))
 	     (base (make-temp-name "downloaded-from-annas-archive-"))
-	     (filename (if extension
-			   (file-name-with-extension base extension)
-			 base))
+	     (filename (file-name-with-extension base extension))
 	     (path (file-name-concat annas-archive-downloads-dir filename)))
 	(if (and (stringp path) (not (string-empty-p path)))
 	    (annas-archive-save-file url path)
@@ -525,6 +525,12 @@ REDIRECT is the final URL (a string) reported by `url-retrieve'."
 	("text/plain" "txt")
 	(_ nil)))))
 
+(defun annas-archive--extension-from-url (url)
+  "Return a file extension inferred from URL.
+URL is the original download URL passed to `url-retrieve'."
+  (when (stringp url)
+    (file-name-extension url)))
+
 (defun annas-archive-save-file (url path)
   "Save the file at URL to PATH."
   (write-file path)
@@ -542,7 +548,6 @@ externally, signal an error, or fail silently."
        (message (concat message " Downloading with the default browser instead")))
       ('error (user-error message))
       (_ (message message)))))
-
 
 ;;;;; Authentication
 
