@@ -93,29 +93,29 @@ This address changes regularly; to find the most recent URL, go to
 
 ;;;;; Main options
 
-(defcustom annas-archive-use-fast-download-links nil
-  "Whether to use fast download links from Anna’s Archive.
-If non-nil, use fast download links available to paying members."
-  :type 'boolean
-  :group 'annas-archive)
-
 (defcustom annas-archive-secret-key nil
   "Secret key for the Anna's Archive fast download API.
-Required for programmatic downloads with `annas-archive-use-eww'. To find your
-key, log into Anna's Archive with a paid membership and visit the account page,
-or run `M-x annas-archive-authenticate'."
+When set, enables programmatic downloads directly within Emacs via the fast
+download API. To find your key, log into Anna's Archive with a paid membership
+and visit the account page, or run `M-x annas-archive-authenticate'.
+
+Setting this option also implies `annas-archive-use-eww'."
   :type '(choice (const :tag "Not set" nil) string)
   :group 'annas-archive)
 
 (defcustom annas-archive-use-eww nil
   "Whether to use `eww' for downloading files.
 If non-nil, files will be downloaded directly within Emacs. This requires
-`annas-archive-use-fast-download-links' and `annas-archive-secret-key' to be
-set. Note that if `annas-archive-use-fast-download-links' is nil, this option
-will have no effect, since slow download links are protected by a CAPTCHA which
-`eww' cannot handle."
+`annas-archive-secret-key' to be set. Note that slow download links are
+protected by a CAPTCHA which `eww' cannot handle, so without a secret key this
+option will have no effect."
   :type 'boolean
   :group 'annas-archive)
+
+(make-obsolete-variable
+ 'annas-archive-use-fast-download-links
+ "Set `annas-archive-secret-key' instead."
+ "2026-02-15")
 
 (defcustom annas-archive-when-eww-download-fails 'external
   "What to do in the event of a failure to download the file with `eww'.
@@ -461,15 +461,10 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 	    (annas-archive-download-file-with-eww api-download-url "fast"))
 	   ;; Fall back to scraping download links from the page.
 	   (t
-	    (let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
-	      (if-let ((url (or (annas-archive-get-url-in-link "Download")
-				(annas-archive-get-url-in-link (concat speed " partner server")))))
-		  (if (and annas-archive-use-eww (string= speed "fast"))
-		      (annas-archive-download-file-with-eww url speed)
-		    (annas-archive-download-file-externally url)
-		    (when (string= speed "slow")
-		      (message "Slow download links cannot be opened with `eww'. Downloading with the external browser.")))
-		(annas-archive-handle-eww-failure page-url)))))))
+	    (if-let ((url (or (annas-archive-get-url-in-link "Download")
+			      (annas-archive-get-url-in-link "slow partner server"))))
+		(annas-archive-download-file-externally url)
+	      (annas-archive-handle-eww-failure page-url))))))
       (if interactive
 	  (message "File will be downloaded to `%s'" annas-archive-downloads-dir)
 	(kill-buffer buffer)))))
@@ -486,9 +481,7 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 
 (defun annas-archive--use-fast-download-api-p ()
   "Return non-nil when the fast download API can be used."
-  (and annas-archive-use-fast-download-links
-       annas-archive-use-eww
-       (stringp annas-archive-secret-key)
+  (and (stringp annas-archive-secret-key)
        (not (string-empty-p annas-archive-secret-key))))
 
 (defun annas-archive--md5-from-url (url)
@@ -657,16 +650,13 @@ externally, signal an error, or fail silently."
 ;;;; Migration warning
 
 (with-eval-after-load 'annas-archive
-  (when (and annas-archive-use-eww
-	     annas-archive-use-fast-download-links
-	     (not (and (stringp annas-archive-secret-key)
-		       (not (string-empty-p annas-archive-secret-key)))))
+  (when (and (bound-and-true-p annas-archive-use-fast-download-links)
+	     (not (annas-archive--use-fast-download-api-p)))
     (display-warning
      'annas-archive
-     "Programmatic downloads now require `annas-archive-secret-key' to be set.
-Anna's Archive changed their download flow; eww-based downloads now use the
-fast download JSON API.  Set `annas-archive-secret-key' to your account secret
-key.  See https://github.com/benthamite/annas-archive for details."
+     "`annas-archive-use-fast-download-links' is obsolete.
+Set `annas-archive-secret-key' to your account secret key instead.
+See https://github.com/benthamite/annas-archive for details."
      :warning)))
 
 (provide 'annas-archive)

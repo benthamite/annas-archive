@@ -10,7 +10,18 @@
 
 As of February 2026, Anna's Archive changed their download flow so that the "Download" links on item pages are now JavaScript-driven. This broke the previous `eww`-based download mechanism. Programmatic downloads now use the [fast download JSON API](https://annas-archive.li/dyn/api/fast_download.json), which requires a **secret key**.
 
-If you use `annas-archive-use-eww`, you must now also set `annas-archive-secret-key` to your Anna's Archive secret key. To find your key, log into Anna's Archive with your paid membership and visit your [account page](https://annas-archive.li/account/).
+If you were using `annas-archive-use-fast-download-links` and/or `annas-archive-use-eww`, replace them with `annas-archive-secret-key`:
+
+```emacs-lisp
+;; Before:
+(setq annas-archive-use-fast-download-links t)
+(setq annas-archive-use-eww t)
+
+;; After:
+(setq annas-archive-secret-key "YOUR_SECRET_KEY")
+```
+
+To find your key, log into Anna's Archive with your paid membership and visit your [account page](https://annas-archive.li/account/). The variable `annas-archive-use-fast-download-links` is now obsolete; `annas-archive-use-eww` is still supported but implied by setting the secret key.
 
 ## Installation
 
@@ -55,11 +66,9 @@ Run `M-x annas-archive-download` and enter either:
 
 ### Download options
 
-- `annas-archive-use-fast-download-links` (default: `nil`): If non-nil, the package will use the fast download links provided by Anna's Archive. To use such links, a [membership](https://annas-archive.li/donate) is required.
+- `annas-archive-secret-key` (default: `nil`): Secret key for the Anna's Archive fast download API. When set, enables programmatic downloads directly within Emacs. A [membership](https://annas-archive.li/donate) is required. To find your key, log into your account and visit the [account page](https://annas-archive.li/account/).
 
-- `annas-archive-secret-key` (default: `nil`): Secret key for the Anna's Archive fast download API. Required for programmatic downloads when `annas-archive-use-eww` is non-`nil`. To find your key, log into Anna's Archive with a paid membership and visit the [account page](https://annas-archive.li/account/).
-
-- `annas-archive-use-eww` (default: `nil`): If non-`nil`, the package will download files directly within Emacs using the fast download API. This requires both `annas-archive-use-fast-download-links` and `annas-archive-secret-key` to be set. If `annas-archive-use-fast-download-links` is `nil`, this option will have no effect, since slow download links are protected by a CAPTCHA which `eww` cannot handle.
+- `annas-archive-use-eww` (default: `nil`): If non-`nil`, the package will download files directly within Emacs using the fast download API. This requires `annas-archive-secret-key` to be set. Note: setting `annas-archive-secret-key` implies this option.
 
 - `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww` (when `annas-archive-use-eww` is non-`nil`). If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently.
 
