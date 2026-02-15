@@ -21,7 +21,7 @@ If you were using `annas-archive-use-fast-download-links` and/or `annas-archive-
 (setq annas-archive-secret-key "YOUR_SECRET_KEY")
 ```
 
-To find your key, log into Anna's Archive with your paid membership and visit your [account page](https://annas-archive.li/account/). The variable `annas-archive-use-fast-download-links` is now obsolete; `annas-archive-use-eww` is still supported but implied by setting the secret key.
+To find your key, log into Anna's Archive with your paid membership and visit your [account page](https://annas-archive.li/account/). Both `annas-archive-use-fast-download-links` and `annas-archive-use-eww` are now obsolete.
 
 ## Installation
 
@@ -68,13 +68,11 @@ Run `M-x annas-archive-download` and enter either:
 
 - `annas-archive-secret-key` (default: `nil`): Secret key for the Anna's Archive fast download API. When set, enables programmatic downloads directly within Emacs. A [membership](https://annas-archive.li/donate) is required. To find your key, log into your account and visit the [account page](https://annas-archive.li/account/).
 
-- `annas-archive-use-eww` (default: `nil`): If non-`nil`, the package will download files directly within Emacs using the fast download API. This requires `annas-archive-secret-key` to be set. Note: setting `annas-archive-secret-key` implies this option.
+- `annas-archive-when-download-fails` (default: `external`): What to do when a programmatic download fails. If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently.
 
-- `annas-archive-when-eww-download-fails` (default: `external`): What to do in the event of a failure to download the file with `eww` (when `annas-archive-use-eww` is non-`nil`). If `external`, download the file with the default browser. If `error`, signal an error. Otherwise, fail silently.
+- `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. Only relevant when `annas-archive-secret-key` is set.
 
-- `annas-archive-downloads-dir` (default: `~/Downloads/`): The directory where the downloaded files will be saved. This user option is only relevant when `annas-archive-use-eww` is non-`nil`.
-
-- `annas-archive-post-download-hook` (default: `nil`): Hook run after downloading a file from Anna's Archive. The hook is run with the url as its first argument and, when the file was downloaded with `eww`, the destination path of the downloaded file as its second argument.
+- `annas-archive-post-download-hook` (default: `nil`): Hook run after downloading a file from Anna's Archive. The hook is run with the URL as its first argument and, when the file was downloaded programmatically, the destination path of the downloaded file as its second argument.
 
 ### Search options
 
