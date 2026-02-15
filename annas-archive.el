@@ -500,13 +500,27 @@ URL is the download URL passed to `url-retrieve'."
 	     (extension (or (annas-archive--extension-from-redirect redirect)
 			    (annas-archive--extension-from-headers)
 			    (annas-archive--extension-from-url url)
-			    "pdf"))
-	     (base (make-temp-name "downloaded-from-annas-archive-"))
-	     (filename (file-name-with-extension base extension))
-	     (path (file-name-concat annas-archive-downloads-dir filename)))
-	(if (and (stringp path) (not (string-empty-p path)))
-	    (annas-archive-save-file url path)
-	  (annas-archive-handle-eww-failure url))))))
+			    "pdf")))
+	;; Strip HTTP headers from the response buffer.
+	(goto-char (point-min))
+	(when (re-search-forward "\r?\n\r?\n" nil t)
+	  (delete-region (point-min) (point)))
+	(if (annas-archive--response-body-html-p)
+	    (annas-archive-handle-eww-failure url)
+	  (let* ((base (make-temp-name "downloaded-from-annas-archive-"))
+		 (filename (file-name-with-extension base extension))
+		 (path (file-name-concat annas-archive-downloads-dir filename)))
+	    (if (and (stringp path) (not (string-empty-p path)))
+		(annas-archive-save-file url path)
+	      (annas-archive-handle-eww-failure url))))))))
+
+(defun annas-archive--response-body-html-p ()
+  "Return non-nil if the current buffer appears to contain HTML.
+This indicates the server returned a challenge page (e.g. DDoS Guard)
+rather than the expected file."
+  (save-excursion
+    (goto-char (point-min))
+    (looking-at-p "\\s-*<\\(?:!DOCTYPE\\|[hH][tT][mM][lL]\\)")))
 
 (defun annas-archive--extension-from-redirect (redirect)
   "Return a file extension inferred from REDIRECT.
@@ -533,7 +547,8 @@ URL is the original download URL passed to `url-retrieve'."
 
 (defun annas-archive-save-file (url path)
   "Save the file at URL to PATH."
-  (write-file path)
+  (let ((coding-system-for-write 'no-conversion))
+    (write-region (point-min) (point-max) path))
   (message "Downloaded file: `%s'" path)
   (run-hook-with-args 'annas-archive-post-download-hook url path))
 
