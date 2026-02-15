@@ -41,10 +41,6 @@ This address changes regularly; to find the most recent URL, go to
 <https://en.wikipedia.org/wiki/Anna%27s_Archive> and get the link under
 ‘External links’.")
 
-(defconst annas-archive-auth-url
-  (concat annas-archive-home-url "account/")
-  "URL to authenticate with Anna’s Archive.")
-
 (defconst annas-archive-download-url-pattern
   (concat annas-archive-home-url "\\(?:md5\\|scidb\\)/.*")
   "Regexp pattern for Anna's Archive download page.")
@@ -97,37 +93,38 @@ This address changes regularly; to find the most recent URL, go to
   "Secret key for the Anna's Archive fast download API.
 When set, enables programmatic downloads directly within Emacs via the fast
 download API. To find your key, log into Anna's Archive with a paid membership
-and visit the account page, or run `M-x annas-archive-authenticate'.
-
-Setting this option also implies `annas-archive-use-eww'."
+and visit the account page."
   :type '(choice (const :tag "Not set" nil) string)
   :group 'annas-archive)
 
-(defcustom annas-archive-use-eww nil
-  "Whether to use `eww' for downloading files.
-If non-nil, files will be downloaded directly within Emacs. This requires
-`annas-archive-secret-key' to be set. Note that slow download links are
-protected by a CAPTCHA which `eww' cannot handle, so without a secret key this
-option will have no effect."
-  :type 'boolean
-  :group 'annas-archive)
+(make-obsolete-variable
+ 'annas-archive-use-eww
+ "Set `annas-archive-secret-key' instead."
+ "2026-02-15")
 
 (make-obsolete-variable
  'annas-archive-use-fast-download-links
  "Set `annas-archive-secret-key' instead."
  "2026-02-15")
 
-(defcustom annas-archive-when-eww-download-fails 'external
-  "What to do in the event of a failure to download the file with `eww'.
+(defcustom annas-archive-when-download-fails 'external
+  "What to do when a programmatic download fails.
 If `external' (default), download the file with the default browser. If `error',
 signal an error. Otherwise, fail silently."
-  :type 'boolean
+  :type '(choice (const :tag "Download externally" external)
+                 (const :tag "Signal error" error)
+                 (const :tag "Fail silently" nil))
   :group 'annas-archive)
+
+(define-obsolete-variable-alias
+  'annas-archive-when-eww-download-fails
+  'annas-archive-when-download-fails
+  "2026-02-15")
 
 (defcustom annas-archive-downloads-dir
   (expand-file-name "~/Downloads/")
   "Directory where files downloaded from Anna’s Archive are saved.
-This user option is only relevant when `annas-archive-use-eww' is non-nil."
+This user option is only relevant when `annas-archive-secret-key' is set."
   :type 'directory
   :group 'annas-archive)
 
@@ -146,7 +143,7 @@ By default, all supported file extensions are included."
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
 The hook is run with the url as its first argument and, when the file was
-downloaded with `eww', the destination path of the downloaded file as its second
+downloaded programmatically, the destination path of the downloaded file as its second
 argument."
   :type 'hook)
 
@@ -222,7 +219,7 @@ If STRING is a DOI, return the SciDB URL. Otherwise, return the search URL."
   (let ((s (string-trim (or string ""))))
     (if (annas-archive--doi-p s)
 	(concat annas-archive-home-url "scidb/" s)
-      (concat annas-archive-home-url "search?q=" (url-encode-url s)))))
+      (concat annas-archive-home-url "search?q=" (url-hexify-string s)))))
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
@@ -256,7 +253,7 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 		(setq end (point-max)))
 	      (push (cons (buffer-substring-no-properties beg end) (get-text-property beg 'shr-url))
 		    candidates))
-	  (setq end (next-single-property-change (point) 'shr-url)))
+	  (setq end (or (next-single-property-change (point) 'shr-url) (point-max))))
 	(goto-char (max end (1+ (point)))))
       (nreverse candidates))))
 
@@ -426,13 +423,17 @@ spaces."
 (defun annas-archive-select-and-open-url ()
   "Get the download URLs from the Anna’s Archive search results buffer."
   (remove-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
-  (unless (annas-archive-collect-results)
-    (when (and annas-archive-retry-with-all-file-types
-	       (not (equal (sort (copy-sequence annas-archive-included-file-types) #'string<)
-			   (sort (copy-sequence annas-archive-supported-file-types) #'string<)))
-	       (y-or-n-p "No results found. Try again with all file types? "))
-      (unless (annas-archive-collect-results annas-archive-supported-file-types)
-	(message "No results found.")))))
+  (condition-case nil
+      (annas-archive-collect-results)
+    (user-error
+     (if (and annas-archive-retry-with-all-file-types
+	      (not (equal (sort (copy-sequence annas-archive-included-file-types) #'string<)
+			  (sort (copy-sequence annas-archive-supported-file-types) #'string<)))
+	      (y-or-n-p "No results found. Try again with all file types? "))
+	 (condition-case nil
+	     (annas-archive-collect-results annas-archive-supported-file-types)
+	   (user-error (message "No results found.")))
+       (message "No results found.")))))
 
 ;;;;; Downloading
 
@@ -455,16 +456,9 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 	(let* ((md5 (annas-archive--md5-from-url page-url))
 	       (api-download-url (when (and md5 (annas-archive--use-fast-download-api-p))
 				   (annas-archive--fast-download-api md5))))
-	  (cond
-	   ;; Fast download API returned a direct URL.
-	   (api-download-url
-	    (annas-archive-download-file-with-eww api-download-url "fast"))
-	   ;; Fall back to scraping download links from the page.
-	   (t
-	    (if-let ((url (or (annas-archive-get-url-in-link "Download")
-			      (annas-archive-get-url-in-link "slow partner server"))))
-		(annas-archive-download-file-externally url)
-	      (annas-archive-handle-eww-failure page-url))))))
+	  (if api-download-url
+	      (annas-archive-download-file-internally api-download-url "fast")
+	    (annas-archive-handle-download-failure page-url))))
       (if interactive
 	  (message "File will be downloaded to `%s'" annas-archive-downloads-dir)
 	(kill-buffer buffer)))))
@@ -519,10 +513,10 @@ Returns the download URL string, or nil on failure."
 		 nil))))
 	(kill-buffer buffer)))))
 
-(defun annas-archive-download-file-with-eww (url speed)
-  "Download the file in URL with `eww'.
+(defun annas-archive-download-file-internally (url speed)
+  "Download the file at URL programmatically within Emacs.
 URL is the URL of the download link, and SPEED is the download speed."
-  (url-retrieve url (annas-archive-eww-download-file-callback url))
+  (url-retrieve url (annas-archive-download-file-callback url))
   (message (format "Found %s download link. Proceeding to download..." speed)))
 
 (defun annas-archive-download-file-externally (url)
@@ -531,25 +525,8 @@ URL is the URL of the download link."
   (browse-url-default-browser url)
   (run-hook-with-args 'annas-archive-post-download-hook url))
 
-(defun annas-archive-get-url-in-link (title)
-  "Return the URL of the link whose title is TITLE."
-  (let (found-url)
-    (save-excursion
-      (goto-char (point-min))
-      (while (not (or found-url (eobp)))
-	(when-let* ((url (get-text-property (point) 'shr-url))
-		    (link-title (buffer-substring-no-properties
-				 (point)
-				 (or (next-single-property-change (point) 'shr-url)
-				     (point-max)))))
-	  (when (string-match-p (regexp-quote title) link-title)
-	    (setq found-url url)))
-	(goto-char (or (next-single-property-change (point) 'shr-url)
-		       (point-max)))))
-    found-url))
-
-(defun annas-archive-eww-download-file-callback (url)
-  "Return a callback for saving the file downloaded from URL with `eww'.
+(defun annas-archive-download-file-callback (url)
+  "Return a callback for saving the file downloaded from URL.
 URL is the download URL passed to `url-retrieve'."
   (lambda (status)
     "STATUS is the status of the download process; see `url-retrieve' for details."
@@ -565,13 +542,13 @@ URL is the download URL passed to `url-retrieve'."
 	(when (re-search-forward "\r?\n\r?\n" nil t)
 	  (delete-region (point-min) (point)))
 	(if (annas-archive--response-body-html-p)
-	    (annas-archive-handle-eww-failure url)
+	    (annas-archive-handle-download-failure url)
 	  (let* ((base (make-temp-name "downloaded-from-annas-archive-"))
 		 (filename (file-name-with-extension base extension))
 		 (path (file-name-concat annas-archive-downloads-dir filename)))
 	    (if (and (stringp path) (not (string-empty-p path)))
 		(annas-archive-save-file url path)
-	      (annas-archive-handle-eww-failure url))))))))
+	      (annas-archive-handle-download-failure url))))))))
 
 (defun annas-archive--response-body-html-p ()
   "Return non-nil if the current buffer appears to contain HTML.
@@ -611,50 +588,27 @@ URL is the original download URL passed to `url-retrieve'."
   (message "Downloaded file: `%s'" path)
   (run-hook-with-args 'annas-archive-post-download-hook url path))
 
-(defun annas-archive-handle-eww-failure (url)
-  "Take appropriate action when `eww' fails to download file from URL.
-Depending on the value of `annas-archive-when-eww-download-fails', download
+(defun annas-archive-handle-download-failure (url)
+  "Take appropriate action when a programmatic download fails for URL.
+Depending on the value of `annas-archive-when-download-fails', download
 externally, signal an error, or fail silently."
-  (let ((message "Failed to download file with `eww'"))
-    (pcase annas-archive-when-eww-download-fails
+  (let ((message "Failed to download file programmatically"))
+    (pcase annas-archive-when-download-fails
       ('external
        (annas-archive-download-file-externally url)
-       (message (concat message " Downloading with the default browser instead")))
+       (message (concat message ". Downloading with the default browser instead")))
       ('error (user-error message))
       (_ (message message)))))
-
-;;;;; Authentication
-
-;;;###autoload
-(defun annas-archive-authenticate ()
-  "Authenticate with Anna’s Archive."
-  (interactive)
-  (save-window-excursion
-    (add-hook 'eww-after-render-hook #'annas-archive-get-authentication-details)
-    (eww annas-archive-auth-url)))
-
-(defun annas-archive-get-authentication-details ()
-  "Return user authentication details from Anna’s Archive."
-  (remove-hook 'eww-after-render-hook #'annas-archive-get-authentication-details)
-  (let (id)
-    (goto-char (point-min))
-    (re-search-forward "Account ID: \\(.*\\)" nil t)
-    (setq id (match-string 1))
-    (re-search-forward "Secret key (don’t share!): show\\(.*\\)" nil t)
-    (if id
-	(message "You are authenticated.\nAccount ID: %s\nTo see your secret key, visit %s"
-		 id annas-archive-auth-url)
-      (eww annas-archive-auth-url)
-      (message "You don't seem to be authenticated. Please enter your key in the `eww' buffer."))))
 
 ;;;; Migration warning
 
 (with-eval-after-load 'annas-archive
-  (when (and (bound-and-true-p annas-archive-use-fast-download-links)
+  (when (and (or (bound-and-true-p annas-archive-use-fast-download-links)
+		 (bound-and-true-p annas-archive-use-eww))
 	     (not (annas-archive--use-fast-download-api-p)))
     (display-warning
      'annas-archive
-     "`annas-archive-use-fast-download-links' is obsolete.
+     "`annas-archive-use-fast-download-links' and `annas-archive-use-eww' are obsolete.
 Set `annas-archive-secret-key' to your account secret key instead.
 See https://github.com/benthamite/annas-archive for details."
      :warning)))
