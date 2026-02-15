@@ -654,5 +654,20 @@ externally, signal an error, or fail silently."
       (eww annas-archive-auth-url)
       (message "You don't seem to be authenticated. Please enter your key in the `eww' buffer."))))
 
+;;;; Migration warning
+
+(with-eval-after-load 'annas-archive
+  (when (and annas-archive-use-eww
+	     annas-archive-use-fast-download-links
+	     (not (and (stringp annas-archive-secret-key)
+		       (not (string-empty-p annas-archive-secret-key)))))
+    (display-warning
+     'annas-archive
+     "Programmatic downloads now require `annas-archive-secret-key' to be set.
+Anna's Archive changed their download flow; eww-based downloads now use the
+fast download JSON API.  Set `annas-archive-secret-key' to your account secret
+key.  See https://github.com/benthamite/annas-archive for details."
+     :warning)))
+
 (provide 'annas-archive)
 ;;; annas-archive.el ends here
