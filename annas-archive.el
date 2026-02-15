@@ -28,6 +28,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'json)
 
 ;;;; Variables
 
@@ -46,7 +47,11 @@ This address changes regularly; to find the most recent URL, go to
 
 (defconst annas-archive-download-url-pattern
   (concat annas-archive-home-url "\\(?:md5\\|scidb\\)/.*")
-  "Regexp pattern for Anna’s Archive download page.")
+  "Regexp pattern for Anna's Archive download page.")
+
+(defconst annas-archive-fast-download-api-path
+  "dyn/api/fast_download.json"
+  "Path to the fast download JSON API endpoint.")
 
 (defconst annas-archive-supported-file-types
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
@@ -94,13 +99,21 @@ If non-nil, use fast download links available to paying members."
   :type 'boolean
   :group 'annas-archive)
 
+(defcustom annas-archive-secret-key nil
+  "Secret key for the Anna's Archive fast download API.
+Required for programmatic downloads with `annas-archive-use-eww'. To find your
+key, log into Anna's Archive with a paid membership and visit the account page,
+or run `M-x annas-archive-authenticate'."
+  :type '(choice (const :tag "Not set" nil) string)
+  :group 'annas-archive)
+
 (defcustom annas-archive-use-eww nil
   "Whether to use `eww' for downloading files.
-If non-nil, files will be downloaded directly with `eww'. If
-`annas-archive-use-fast-download-links' is non-nil, to use this option you must
-first authenticate by running `M-x annas-archive-authenticate'. Note that if
-`annas-archive-use-fast-download-links' is nil, this option will have no effect,
-since slow download links are protected by a CAPTCHA which `eww' cannot handle."
+If non-nil, files will be downloaded directly within Emacs. This requires
+`annas-archive-use-fast-download-links' and `annas-archive-secret-key' to be
+set. Note that if `annas-archive-use-fast-download-links' is nil, this option
+will have no effect, since slow download links are protected by a CAPTCHA which
+`eww' cannot handle."
   :type 'boolean
   :group 'annas-archive)
 
@@ -424,6 +437,7 @@ spaces."
 ;;;;; Downloading
 
 (defvar eww-data)
+(defvar url-request-extra-headers)
 (autoload 'browse-url-default-browser "browse-url")
 (defun annas-archive-download-file (&optional interactive)
   "Download the file in the current eww buffer page.
@@ -433,19 +447,29 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
   (annas-archive-ensure-download-page)
   (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
   (save-window-excursion
-    (let ((buffer (current-buffer)))
+    (let ((buffer (current-buffer))
+	  (page-url (plist-get eww-data :url)))
       (goto-char (point-min))
       (if (re-search-forward "Our servers are not responding" nil t)
 	  (message "Servers are not responding. Please try again later.")
-	(let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
-	  (if-let ((url (or (annas-archive-get-url-in-link "Download")
-			    (annas-archive-get-url-in-link (concat speed " partner server")))))
-	      (if (and annas-archive-use-eww (string= speed "fast"))
-		  (annas-archive-download-file-with-eww url speed)
-		(annas-archive-download-file-externally url)
-		(when (string= speed "slow")
-		  (message "Slow download links cannot be opened with `eww'. Downloading with the external browser.")))
-	    (annas-archive-handle-eww-failure (plist-get eww-data :url)))))
+	(let* ((md5 (annas-archive--md5-from-url page-url))
+	       (api-download-url (when (and md5 (annas-archive--use-fast-download-api-p))
+				   (annas-archive--fast-download-api md5))))
+	  (cond
+	   ;; Fast download API returned a direct URL.
+	   (api-download-url
+	    (annas-archive-download-file-with-eww api-download-url "fast"))
+	   ;; Fall back to scraping download links from the page.
+	   (t
+	    (let ((speed (if annas-archive-use-fast-download-links "fast" "slow")))
+	      (if-let ((url (or (annas-archive-get-url-in-link "Download")
+				(annas-archive-get-url-in-link (concat speed " partner server")))))
+		  (if (and annas-archive-use-eww (string= speed "fast"))
+		      (annas-archive-download-file-with-eww url speed)
+		    (annas-archive-download-file-externally url)
+		    (when (string= speed "slow")
+		      (message "Slow download links cannot be opened with `eww'. Downloading with the external browser.")))
+		(annas-archive-handle-eww-failure page-url)))))))
       (if interactive
 	  (message "File will be downloaded to `%s'" annas-archive-downloads-dir)
 	(kill-buffer buffer)))))
@@ -459,6 +483,48 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 	    (user-error "Not on a download page"))
 	(user-error "No URL found"))
     (user-error "Not in an `eww' buffer")))
+
+(defun annas-archive--use-fast-download-api-p ()
+  "Return non-nil when the fast download API can be used."
+  (and annas-archive-use-fast-download-links
+       annas-archive-use-eww
+       (stringp annas-archive-secret-key)
+       (not (string-empty-p annas-archive-secret-key))))
+
+(defun annas-archive--md5-from-url (url)
+  "Extract the MD5 hash from an Anna's Archive URL.
+URL is a string like \"https://annas-archive.li/md5/d6e1dc51...\"."
+  (when (and (stringp url)
+	     (string-match "/md5/\\([0-9a-f]+\\)" url))
+    (match-string 1 url)))
+
+(defun annas-archive--fast-download-api (md5)
+  "Return a direct download URL for MD5 using the fast download API.
+Returns the download URL string, or nil on failure."
+  (let* ((api-url (format "%s%s?md5=%s&key=%s&path_index=0&domain_index=0"
+			  annas-archive-home-url
+			  annas-archive-fast-download-api-path
+			  md5 annas-archive-secret-key))
+	 (url-request-extra-headers '(("Accept" . "application/json")))
+	 (buffer (url-retrieve-synchronously api-url t nil 30)))
+    (when buffer
+      (unwind-protect
+	  (with-current-buffer buffer
+	    (goto-char (point-min))
+	    (when (re-search-forward "\r?\n\r?\n" nil t)
+	      (condition-case nil
+		  (let* ((json-data (json-read))
+			 (download-url (cdr (assq 'download_url json-data))))
+		    (if (and (stringp download-url)
+			     (not (string-empty-p download-url)))
+			download-url
+		      (when-let ((err (cdr (assq 'error json-data))))
+			(message "Fast download API error: %s" err))
+		      nil))
+		(json-error
+		 (message "Fast download API returned invalid JSON")
+		 nil))))
+	(kill-buffer buffer)))))
 
 (defun annas-archive-download-file-with-eww (url speed)
   "Download the file in URL with `eww'.
