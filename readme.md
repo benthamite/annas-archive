@@ -6,23 +6,6 @@
 
 ![Demo](demo.gif)
 
-## Breaking change
-
-As of February 2026, Anna's Archive changed their download flow so that the "Download" links on item pages are now JavaScript-driven. This broke the previous `eww`-based download mechanism. Programmatic downloads now use the [fast download JSON API](https://annas-archive.li/dyn/api/fast_download.json), which requires a **secret key**.
-
-If you were using `annas-archive-use-fast-download-links` and/or `annas-archive-use-eww`, replace them with `annas-archive-secret-key`:
-
-```emacs-lisp
-;; Before:
-(setq annas-archive-use-fast-download-links t)
-(setq annas-archive-use-eww t)
-
-;; After:
-(setq annas-archive-secret-key "YOUR_SECRET_KEY")
-```
-
-To find your key, log into Anna's Archive with your paid membership and visit your [account page](https://annas-archive.li/account/). Both `annas-archive-use-fast-download-links` and `annas-archive-use-eww` are now obsolete.
-
 ## Installation
 
 ### Manual
@@ -87,6 +70,23 @@ Run `M-x annas-archive-download` and enter either:
 - `annas-archive-size-column-width` (default: `8`): Width of the size column when displaying search results.
 - `annas-archive-year-column-width` (default: `4`): Width of the year column when displaying search results.
 - `annas-archive-language-column-width` (default: `20`): Width of the language column when displaying search results.
+
+## Breaking change
+
+As of February 2026, Anna's Archive changed their download flow so that the "Download" links on item pages are now JavaScript-driven. This broke the previous `eww`-based download mechanism. Programmatic downloads now use the [fast download JSON API](https://annas-archive.li/dyn/api/fast_download.json), which requires a **secret key**.
+
+If you were using `annas-archive-use-fast-download-links` and/or `annas-archive-use-eww`, replace them with `annas-archive-secret-key`:
+
+```emacs-lisp
+;; Before:
+(setq annas-archive-use-fast-download-links t)
+(setq annas-archive-use-eww t)
+
+;; After:
+(setq annas-archive-secret-key "YOUR_SECRET_KEY")
+```
+
+To find your key, log into Anna's Archive with your paid membership and visit your [account page](https://annas-archive.li/account/). Both `annas-archive-use-fast-download-links` and `annas-archive-use-eww` are now obsolete.
 
 ## Troubleshooting
 
