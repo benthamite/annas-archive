@@ -485,6 +485,24 @@ URL is a string like \"https://annas-archive.li/md5/d6e1dc51...\"."
 	     (string-match "/md5/\\([0-9a-f]+\\)" url))
     (match-string 1 url)))
 
+(defun annas-archive--fast-download-error-message (err)
+  "Return a user-friendly message for fast download API error ERR."
+  (pcase err
+    ("Invalid secret key"
+     "Fast download API: invalid secret key. Check `annas-archive-secret-key'.")
+    ("Not a member"
+     "Fast download API: your account does not have a paid membership.")
+    ("No downloads left"
+     "Fast download API: daily download quota exhausted. Try again tomorrow.")
+    ("Record not found"
+     "Fast download API: record not found. The file may not exist in Anna's Archive.")
+    ("Invalid domain_index or path_index"
+     "Fast download API: file not available for fast download on this server.")
+    ("Error during fetching"
+     "Fast download API: server error. Try again later.")
+    (_
+     (format "Fast download API error: %s" err))))
+
 (defun annas-archive--fast-download-api (md5)
   "Return a direct download URL for MD5 using the fast download API.
 Returns the download URL string, or nil on failure."
@@ -506,7 +524,7 @@ Returns the download URL string, or nil on failure."
 			     (not (string-empty-p download-url)))
 			download-url
 		      (when-let ((err (cdr (assq 'error json-data))))
-			(message "Fast download API error: %s" err))
+			(message "%s" (annas-archive--fast-download-error-message err)))
 		      nil))
 		(json-error
 		 (message "Fast download API returned invalid JSON")
