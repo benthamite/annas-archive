@@ -453,7 +453,8 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
       (goto-char (point-min))
       (if (re-search-forward "Our servers are not responding" nil t)
 	  (message "Servers are not responding. Please try again later.")
-	(let* ((md5 (annas-archive--md5-from-url page-url))
+	(let* ((md5 (or (annas-archive--md5-from-url page-url)
+		       (annas-archive--md5-from-page)))
 	       (api-download-url (when (and md5 (annas-archive--use-fast-download-api-p))
 				   (annas-archive--fast-download-api md5))))
 	  (if api-download-url
@@ -484,6 +485,14 @@ URL is a string like \"https://annas-archive.li/md5/d6e1dc51...\"."
   (when (and (stringp url)
 	     (string-match "/md5/\\([0-9a-f]+\\)" url))
     (match-string 1 url)))
+
+(defun annas-archive--md5-from-page ()
+  "Extract the first MD5 hash from links in the current eww buffer.
+This is used as a fallback when the MD5 cannot be extracted from the page URL,
+such as on SciDB pages for DOI lookups."
+  (cl-loop for (_title . url) in (annas-archive-get-links)
+           when (annas-archive--md5-url-p url)
+           return (annas-archive--md5-from-url url)))
 
 (defun annas-archive--fast-download-error-message (err)
   "Return a user-friendly message for fast download API error ERR."
