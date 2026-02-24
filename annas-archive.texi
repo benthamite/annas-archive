@@ -13,7 +13,6 @@
 
 @finalout
 @titlepage
-@title annas-archive: Search and download from Anna's Archive
 @author Pablo Stafforini (@email{pablo@@stafforini.com})
 @end titlepage
 
@@ -23,7 +22,7 @@
 @node Top
 @top annas-archive: Search and download from Anna's Archive
 
-This manual describes the features and customization options for the Emacs Lisp file @samp{annas-archive.el}.
+This manual describes the features and customization options for the Emacs Lisp file @samp{annas-archive.el}. @*
 
 @end ifnottex
 
@@ -85,23 +84,23 @@ Indices
 @node Overview
 @chapter Overview
 
-@samp{annas-archive.el} provides Emacs integration for @uref{https://annas-archive.li/, Anna's Archive}, the largest search engine for shadow libraries. It lets you search for books and papers by title, ISBN, or DOI, browse results in a formatted completion interface, and download files---all without leaving Emacs.
+@samp{annas-archive.el} provides Emacs integration for @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Anna's Archive}, the largest search engine for shadow libraries. It lets you search for books and papers by title, ISBN, or DOI, browse results in a formatted completion interface, and download files---all without leaving Emacs. @*
 
-The development repository is on @uref{https://github.com/benthamite/annas-archive, GitHub}.
+The development repository is on @uref{https://github.com/benthamite/annas-archive, GitHub}. @*
 
-The package works by driving Emacs's built-in @samp{eww} browser behind the scenes to load search results from Anna's Archive, parsing the rendered HTML to extract bibliographic metadata (title, file type, size, language, and year), and presenting the results via @code{completing-read}. When the user selects a result, the package navigates to the item page and initiates a download.
+The package works by driving Emacs's built-in @samp{eww} browser behind the scenes to load search results from Anna's Archive, parsing the rendered HTML to extract bibliographic metadata (title, file type, size, language, and year), and presenting the results via @code{completing-read}. When the user selects a result, the package navigates to the item page and initiates a download. @*
 
-Two download mechanisms are available:
+Two download mechanisms are available: @*
 
 @itemize
 @item
-@strong{Programmatic download via the fast download API@.} When @code{annas-archive-secret-key} is set, the package calls the Anna's Archive JSON API to obtain a direct download URL, then retrieves the file asynchronously within Emacs and saves it to @code{annas-archive-downloads-dir} (@ref{Download options}).
+@strong{Programmatic download via the fast download API@.} When @code{annas-archive-secret-key} is set, the package calls the Anna's Archive JSON API to obtain a direct download URL, then retrieves the file asynchronously within Emacs and saves it to @code{annas-archive-downloads-dir} (@ref{Download options}). @*
 
 @item
-@strong{External browser fallback.} When the API key is not set, or when a programmatic download fails, the package opens the download URL in the system's default browser. This behavior is governed by @code{annas-archive-when-download-fails} (@ref{Download failure handling}).
+@strong{External browser fallback.} When the API key is not set, or when a programmatic download fails, the package opens the download URL in the system's default browser. This behavior is governed by @code{annas-archive-when-download-fails} (@ref{Download failure handling}). @*
 @end itemize
 
-The package depends only on libraries bundled with Emacs: @samp{cl-lib}, @samp{json}, @samp{url-parse}, @samp{url-util}, and @samp{eww}.
+The package depends only on libraries bundled with Emacs: @samp{cl-lib}, @samp{json}, @samp{url-parse}, @samp{url-util}, and @samp{eww}. @*
 
 @menu
 * DOI support::
@@ -111,14 +110,14 @@ The package depends only on libraries bundled with Emacs: @samp{cl-lib}, @samp{j
 @node DOI support
 @section DOI support
 
-When the search string is a DOI (e.g. @samp{10.1145/1458082.1458150}), the package bypasses the normal search flow and navigates directly to the SciDB page for that DOI@. From there it extracts the MD5 hash of the associated file and proceeds with the download. This makes it straightforward to fetch papers by DOI@.
+When the search string is a DOI (e.g. @samp{10.1145/1458082.1458150}), the package bypasses the normal search flow and navigates directly to the SciDB page for that DOI@. From there it extracts the MD5 hash of the associated file and proceeds with the download. This makes it straightforward to fetch papers by DOI@. @*
 
 @node Breaking change (February 2026)
 @section Breaking change (February 2026)
 
-As of February 2026, Anna's Archive changed their download flow so that the ``Download'' links on item pages are now JavaScript-driven. This broke the previous @samp{eww}-based download mechanism. Programmatic downloads now use the @uref{https://annas-archive.li/dyn/api/fast_download.json, fast download JSON API}, which requires a @strong{secret key}.
+As of February 2026, Anna's Archive changed their download flow so that the ``Download'' links on item pages are now JavaScript-driven. This broke the previous @samp{eww}-based download mechanism. Programmatic downloads now use the @uref{https://annas-archive.li/dyn/api/fast_download.json, fast download JSON API}, which requires a @strong{secret key}. @*
 
-If you were using @code{annas-archive-use-fast-download-links} and/or @code{annas-archive-use-eww}, replace them with @code{annas-archive-secret-key}:
+If you were using @code{annas-archive-use-fast-download-links} and/or @code{annas-archive-use-eww}, replace them with @code{annas-archive-secret-key}: @*
 
 @lisp
 ;; Before:
@@ -129,7 +128,7 @@ If you were using @code{annas-archive-use-fast-download-links} and/or @code{anna
 (setq annas-archive-secret-key "YOUR_SECRET_KEY")
 @end lisp
 
-To find your key, log into Anna's Archive with your paid membership and visit your @uref{https://annas-archive.li/account/, account page}. Both @code{annas-archive-use-fast-download-links} and @code{annas-archive-use-eww} are now obsolete.
+To find your key, log into Anna's Archive with your paid membership and visit your @uref{https://annas-archive.li/account/, account page}. Both @code{annas-archive-use-fast-download-links} and @code{annas-archive-use-eww} are now obsolete. @*
 
 @node Installation
 @chapter Installation
@@ -142,7 +141,7 @@ To find your key, log into Anna's Archive with your paid membership and visit yo
 @node Manual installation
 @section Manual installation
 
-Clone the repository and add it to your load path:
+Clone the repository and add it to your load path: @*
 
 @lisp
 (add-to-list 'load-path "/path/to/annas-archive/")
@@ -152,7 +151,7 @@ Clone the repository and add it to your load path:
 @node Installation with use-package
 @section Installation with use-package
 
-If you use @code{use-package}, add one of the following snippets to your init file:
+If you use @code{use-package}, add one of the following snippets to your init file: @*
 
 @lisp
 ;; with vc (Emacs 30+)
@@ -189,31 +188,31 @@ If you use @code{use-package}, add one of the following snippets to your init fi
 @vindex annas-archive-downloads-dir
 @vindex annas-archive-post-download-hook
 
-The user option @code{annas-archive-secret-key} specifies the secret key for the Anna's Archive fast download API@. When set to a non-empty string, it enables programmatic downloads directly within Emacs: the package calls the API to get a direct download URL, retrieves the file asynchronously, and saves it to disk. The default value is @code{nil}, which means programmatic downloads are disabled and the package will fall back to opening the download URL in the system browser.
+The user option @code{annas-archive-secret-key} specifies the secret key for the Anna's Archive fast download API@. When set to a non-empty string, it enables programmatic downloads directly within Emacs: the package calls the API to get a direct download URL, retrieves the file asynchronously, and saves it to disk. The default value is @code{nil}, which means programmatic downloads are disabled and the package will fall back to opening the download URL in the system browser. @*
 
-To obtain a secret key, you need a paid @uref{https://annas-archive.li/donate, membership} on Anna's Archive. Once logged in, visit the @uref{https://annas-archive.li/account/, account page} to find your key.
+To obtain a secret key, you need a paid @uref{https://annas-archive.li/donate, membership} on Anna's Archive. Once logged in, visit the @uref{https://annas-archive.li/account/, account page} to find your key. @*
 
-The user option @code{annas-archive-downloads-dir} specifies the directory where programmatically downloaded files are saved. The default value is @samp{~/Downloads/}. This option is only relevant when @code{annas-archive-secret-key} is set; external browser downloads go to whatever location the browser is configured to use.
+The user option @code{annas-archive-downloads-dir} specifies the directory where programmatically downloaded files are saved. The default value is @samp{~/Downloads/}. This option is only relevant when @code{annas-archive-secret-key} is set; external browser downloads go to whatever location the browser is configured to use. @*
 
-The user option @code{annas-archive-post-download-hook} is a hook run after downloading a file. Each function on the hook is called with the download URL as its first argument. When the file was downloaded programmatically (i.e. via the fast download API), the destination file path is passed as the second argument. This is useful for post-processing, such as automatically renaming or moving the downloaded file. The default value is @code{nil}.
+The user option @code{annas-archive-post-download-hook} is a hook run after downloading a file. Each function on the hook is called with the download URL as its first argument. When the file was downloaded programmatically (i.e. via the fast download API), the destination file path is passed as the second argument. This is useful for post-processing, such as automatically renaming or moving the downloaded file. The default value is @code{nil}. @*
 
 @node Download failure handling
 @section Download failure handling
 
 @vindex annas-archive-when-download-fails
 
-The user option @code{annas-archive-when-download-fails} controls what happens when a programmatic download fails. It accepts one of three values:
+The user option @code{annas-archive-when-download-fails} controls what happens when a programmatic download fails. It accepts one of three values: @*
 
 @itemize
 @item
-@code{external} (the default): open the download URL in the system's default browser so the user can complete the download manually.
+@code{external} (the default): open the download URL in the system's default browser so the user can complete the download manually. @*
 @item
-@code{error}: signal an error, which is useful in non-interactive scripts where silent failure is undesirable.
+@code{error}: signal an error, which is useful in non-interactive scripts where silent failure is undesirable. @*
 @item
-@code{nil}: fail silently with only a message in the echo area.
+@code{nil}: fail silently with only a message in the echo area. @*
 @end itemize
 
-A programmatic download can fail for several reasons: the fast download API may return an error (e.g. daily quota exhausted, invalid key), the remote server may return an HTML challenge page instead of the file, or the connection may time out.
+A programmatic download can fail for several reasons: the fast download API may return an error (e.g. daily quota exhausted, invalid key), the remote server may return an HTML challenge page instead of the file, or the connection may time out. @*
 
 @node Search filtering
 @section Search filtering
@@ -221,15 +220,15 @@ A programmatic download can fail for several reasons: the fast download API may 
 @vindex annas-archive-included-file-types
 @vindex annas-archive-retry-with-all-file-types
 
-The user option @code{annas-archive-included-file-types} specifies which file extensions to include when displaying search results. The value is a list of lowercase extension strings. The default includes all types supported by the package: @samp{pdf}, @samp{epub}, @samp{fb2}, @samp{mobi}, @samp{cbr}, @samp{djvu}, @samp{cbz}, @samp{txt}, and @samp{azw3}.
+The user option @code{annas-archive-included-file-types} specifies which file extensions to include when displaying search results. The value is a list of lowercase extension strings. The default includes all types supported by the package: @samp{pdf}, @samp{epub}, @samp{fb2}, @samp{mobi}, @samp{cbr}, @samp{djvu}, @samp{cbz}, @samp{txt}, and @samp{azw3}. @*
 
-If you only want PDF and EPUB results, for example:
+If you only want PDF and EPUB results, for example: @*
 
 @lisp
 (setq annas-archive-included-file-types '("pdf" "epub"))
 @end lisp
 
-The user option @code{annas-archive-retry-with-all-file-types} controls whether the package automatically retries a search with all supported file types when the filtered search returns no results. When set to @code{t} (the default), the package prompts with a @samp{y-or-n} question before retrying. Set it to @code{nil} to disable this behavior.
+The user option @code{annas-archive-retry-with-all-file-types} controls whether the package automatically retries a search with all supported file types when the filtered search returns no results. When set to @code{t} (the default), the package prompts with a @samp{y-or-n} question before retrying. Set it to @code{nil} to disable this behavior. @*
 
 @node Column widths
 @section Column widths
@@ -240,7 +239,7 @@ The user option @code{annas-archive-retry-with-all-file-types} controls whether 
 @vindex annas-archive-year-column-width
 @vindex annas-archive-language-column-width
 
-The following user options control the column widths in the formatted completion candidates displayed by @code{annas-archive-download} (@ref{Searching and downloading}). Each value is an integer specifying the number of characters.
+The following user options control the column widths in the formatted completion candidates displayed by @code{annas-archive-download} (@ref{Searching and downloading}). Each value is an integer specifying the number of characters. @*
 
 @multitable {aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa} {aaaaaaa} {aaaaaaaaaaaaaaaa}
 @headitem User option
@@ -263,7 +262,7 @@ The following user options control the column widths in the formatted completion
 @tab Language
 @end multitable
 
-You may want to reduce @code{annas-archive-title-column-width} if you work with a narrow frame, or increase @code{annas-archive-language-column-width} if you frequently encounter entries with multiple languages.
+You may want to reduce @code{annas-archive-title-column-width} if you work with a narrow frame, or increase @code{annas-archive-language-column-width} if you frequently encounter entries with multiple languages. @*
 
 @node Commands
 @chapter Commands
@@ -279,22 +278,22 @@ You may want to reduce @code{annas-archive-title-column-width} if you work with 
 
 @findex annas-archive-download
 
-The command @code{annas-archive-download} is the main entry point for the package. When called interactively via @samp{M-x annas-archive-download}, it prompts for a search string. The search string can be:
+The command @code{annas-archive-download} is the main entry point for the package. When called interactively via @samp{M-x annas-archive-download}, it prompts for a search string. The search string can be: @*
 
 @itemize
 @item
-A book title, author name, or any descriptive text.
+A book title, author name, or any descriptive text. @*
 @item
-An ISBN@.
+An ISBN@. @*
 @item
-A DOI (e.g. @samp{10.1145/1458082.1458150}) for academic papers.
+A DOI (e.g. @samp{10.1145/1458082.1458150}) for academic papers. @*
 @end itemize
 
-The command loads the Anna's Archive search results page in @samp{eww} behind the scenes, parses the rendered results to extract titles, file types, sizes, languages, and publication years, and presents them in a formatted @code{completing-read} interface. After you select a result, the package navigates to the item's detail page and initiates the download.
+The command loads the Anna's Archive search results page in @samp{eww} behind the scenes, parses the rendered results to extract titles, file types, sizes, languages, and publication years, and presents them in a formatted @code{completing-read} interface. After you select a result, the package navigates to the item's detail page and initiates the download. @*
 
-When the search string is a DOI, the command skips the search step and navigates directly to the SciDB page for that DOI, proceeding straight to download (@ref{DOI support}).
+When the search string is a DOI, the command skips the search step and navigates directly to the SciDB page for that DOI, proceeding straight to download (@ref{DOI support}). @*
 
-When called non-interactively, the command expects a non-empty string argument and does not prompt. It signals an error if the argument is @code{nil} or empty. This makes it suitable for use in Lisp code:
+When called non-interactively, the command expects a non-empty string argument and does not prompt. It signals an error if the argument is @code{nil} or empty. This makes it suitable for use in Lisp code: @*
 
 @lisp
 (annas-archive-download "10.1145/1458082.1458150")
@@ -306,22 +305,22 @@ When called non-interactively, the command expects a non-empty string argument a
 @findex annas-archive-download-file
 @findex annas-archive-ensure-download-page
 
-The command @code{annas-archive-download-file} downloads the file from the Anna's Archive item page currently displayed in @samp{eww}. This is useful when you have navigated to an item page manually in @samp{eww} and want to trigger the download without going through the search flow.
+The command @code{annas-archive-download-file} downloads the file from the Anna's Archive item page currently displayed in @samp{eww}. This is useful when you have navigated to an item page manually in @samp{eww} and want to trigger the download without going through the search flow. @*
 
-The command first verifies that the current buffer is an @samp{eww} buffer displaying a valid Anna's Archive download page (an MD5 or SciDB URL). If @code{annas-archive-secret-key} is set, it uses the fast download API to retrieve the file programmatically (@ref{Download options}). Otherwise, it falls back according to @code{annas-archive-when-download-fails} (@ref{Download failure handling}).
+The command first verifies that the current buffer is an @samp{eww} buffer displaying a valid Anna's Archive download page (an MD5 or SciDB URL). If @code{annas-archive-secret-key} is set, it uses the fast download API to retrieve the file programmatically (@ref{Download options}). Otherwise, it falls back according to @code{annas-archive-when-download-fails} (@ref{Download failure handling}). @*
 
-When called interactively, it displays a message indicating the download directory. When called non-interactively (e.g. from a hook), it silently kills the @samp{eww} buffer after initiating the download.
+When called interactively, it displays a message indicating the download directory. When called non-interactively (e.g. from a hook), it silently kills the @samp{eww} buffer after initiating the download. @*
 
-The command @code{annas-archive-ensure-download-page} is a guard that verifies the current buffer is an @samp{eww} buffer showing a valid Anna's Archive item page. It signals a @code{user-error} if the buffer is not in @samp{eww-mode}, has no URL, or the URL does not match the expected pattern. This command is called internally by @code{annas-archive-download-file} but is also available for use in custom workflows.
+The command @code{annas-archive-ensure-download-page} is a guard that verifies the current buffer is an @samp{eww} buffer showing a valid Anna's Archive item page. It signals a @code{user-error} if the buffer is not in @samp{eww-mode}, has no URL, or the URL does not match the expected pattern. This command is called internally by @code{annas-archive-download-file} but is also available for use in custom workflows. @*
 
 @node Selecting from search results
 @section Selecting from search results
 
 @findex annas-archive-collect-results
 
-The command @code{annas-archive-collect-results} parses the current @samp{eww} buffer as an Anna's Archive search results page, filters the results by file type, and presents them for selection via @code{completing-read}. It accepts an optional TYPES argument (a list of lowercase extension strings) to override the default filter from @code{annas-archive-included-file-types} (@ref{Search filtering}).
+The command @code{annas-archive-collect-results} parses the current @samp{eww} buffer as an Anna's Archive search results page, filters the results by file type, and presents them for selection via @code{completing-read}. It accepts an optional TYPES argument (a list of lowercase extension strings) to override the default filter from @code{annas-archive-included-file-types} (@ref{Search filtering}). @*
 
-This command is typically called automatically as part of the @code{annas-archive-download} workflow, but it can also be invoked interactively from an @samp{eww} buffer displaying Anna's Archive search results.
+This command is typically called automatically as part of the @code{annas-archive-download} workflow, but it can also be invoked interactively from an @samp{eww} buffer displaying Anna's Archive search results. @*
 
 @node Functions
 @chapter Functions
@@ -337,9 +336,9 @@ This command is typically called automatically as part of the @code{annas-archiv
 @findex annas-archive-parse-results
 @findex annas-archive-get-links
 
-The function @code{annas-archive-parse-results} parses the current @samp{eww} buffer, which should contain Anna's Archive search results, and returns a list of plists. Each plist has the keys @code{:title}, @code{:url}, @code{:type}, @code{:size}, @code{:language}, and @code{:year}. This function is the backbone of the result-selection interface and can be used in custom Lisp code to extract structured data from a search results page.
+The function @code{annas-archive-parse-results} parses the current @samp{eww} buffer, which should contain Anna's Archive search results, and returns a list of plists. Each plist has the keys @code{:title}, @code{:url}, @code{:type}, @code{:size}, @code{:language}, and @code{:year}. This function is the backbone of the result-selection interface and can be used in custom Lisp code to extract structured data from a search results page. @*
 
-The function @code{annas-archive-get-links} extracts all hyperlinks from the current @samp{eww} buffer as an alist of @samp{(TITLE . URL)} pairs. It walks the buffer's text properties to find regions with the @code{shr-url} property, which is how @samp{shr} (the HTML renderer used by @samp{eww}) marks links. While primarily used internally by @code{annas-archive-parse-results}, it may be useful for other @samp{eww}-based scraping tasks.
+The function @code{annas-archive-get-links} extracts all hyperlinks from the current @samp{eww} buffer as an alist of @samp{(TITLE . URL)} pairs. It walks the buffer's text properties to find regions with the @code{shr-url} property, which is how @samp{shr} (the HTML renderer used by @samp{eww}) marks links. While primarily used internally by @code{annas-archive-parse-results}, it may be useful for other @samp{eww}-based scraping tasks. @*
 
 @node Download helpers
 @section Download helpers
@@ -351,17 +350,17 @@ The function @code{annas-archive-get-links} extracts all hyperlinks from the cur
 @findex annas-archive-handle-download-failure
 @findex annas-archive-select-and-open-url
 
-The function @code{annas-archive-download-file-internally} initiates an asynchronous download of the file at a given URL using @code{url-retrieve}. It takes the URL and a descriptive speed string (e.g. @samp{"fast"}) as arguments. The actual file saving is handled by the callback returned by @code{annas-archive-download-file-callback} (@ref{Download options}).
+The function @code{annas-archive-download-file-internally} initiates an asynchronous download of the file at a given URL using @code{url-retrieve}. It takes the URL and a descriptive speed string (e.g. @samp{"fast"}) as arguments. The actual file saving is handled by the callback returned by @code{annas-archive-download-file-callback} (@ref{Download options}). @*
 
-The function @code{annas-archive-download-file-externally} opens the given URL in the system's default browser using @code{browse-url-default-browser} and runs @code{annas-archive-post-download-hook} with the URL as argument.
+The function @code{annas-archive-download-file-externally} opens the given URL in the system's default browser using @code{browse-url-default-browser} and runs @code{annas-archive-post-download-hook} with the URL as argument. @*
 
-The function @code{annas-archive-download-file-callback} returns a closure suitable for use as a @code{url-retrieve} callback. The closure handles HTTP errors, determines the file extension from the response (trying the redirect URL, Content-Type header, and original URL in turn), strips HTTP headers from the response buffer, detects HTML challenge pages, and saves the file via @code{annas-archive-save-file}.
+The function @code{annas-archive-download-file-callback} returns a closure suitable for use as a @code{url-retrieve} callback. The closure handles HTTP errors, determines the file extension from the response (trying the redirect URL, Content-Type header, and original URL in turn), strips HTTP headers from the response buffer, detects HTML challenge pages, and saves the file via @code{annas-archive-save-file}. @*
 
-The function @code{annas-archive-save-file} writes the current buffer contents to the given path using binary (no-conversion) coding, creating the parent directory if needed. It then runs @code{annas-archive-post-download-hook} with the URL and file path.
+The function @code{annas-archive-save-file} writes the current buffer contents to the given path using binary (no-conversion) coding, creating the parent directory if needed. It then runs @code{annas-archive-post-download-hook} with the URL and file path. @*
 
-The function @code{annas-archive-handle-download-failure} dispatches on the value of @code{annas-archive-when-download-fails} to either open the URL externally, signal an error, or fail silently (@ref{Download failure handling}).
+The function @code{annas-archive-handle-download-failure} dispatches on the value of @code{annas-archive-when-download-fails} to either open the URL externally, signal an error, or fail silently (@ref{Download failure handling}). @*
 
-The function @code{annas-archive-select-and-open-url} is an @code{eww-after-render-hook} callback that triggers the result-selection interface after @samp{eww} finishes rendering a search results page. It removes itself from the hook, calls @code{annas-archive-collect-results} (@ref{Selecting from search results}), and handles the retry-with-all-file-types logic controlled by @code{annas-archive-retry-with-all-file-types} (@ref{Search filtering}).
+The function @code{annas-archive-select-and-open-url} is an @code{eww-after-render-hook} callback that triggers the result-selection interface after @samp{eww} finishes rendering a search results page. It removes itself from the hook, calls @code{annas-archive-collect-results} (@ref{Selecting from search results}), and handles the retry-with-all-file-types logic controlled by @code{annas-archive-retry-with-all-file-types} (@ref{Search filtering}). @*
 
 @node Troubleshooting
 @chapter Troubleshooting
@@ -376,23 +375,23 @@ The function @code{annas-archive-select-and-open-url} is an @code{eww-after-rend
 @node Anna's Archive domain changes
 @section Anna's Archive domain changes
 
-Anna's Archive frequently changes its domain name. If the package stops working, check the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article} for the current URL and update @code{annas-archive-home-url} accordingly:
+Anna's Archive frequently changes its domain name. If the package stops working, check the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article} for the current URL and update @code{annas-archive-home-url} accordingly: @*
 
 @lisp
 (setq annas-archive-home-url "https://NEW-DOMAIN/")
 @end lisp
 
-Note the trailing slash, which is required.
+Note the trailing slash, which is required. @*
 
 @node No results found
 @section No results found
 
-If a search returns no results, it may be because @code{annas-archive-included-file-types} is set to a restrictive list. The package will prompt you to retry with all file types if @code{annas-archive-retry-with-all-file-types} is @code{t} (@ref{Search filtering}).
+If a search returns no results, it may be because @code{annas-archive-included-file-types} is set to a restrictive list. The package will prompt you to retry with all file types if @code{annas-archive-retry-with-all-file-types} is @code{t} (@ref{Search filtering}). @*
 
 @node API errors
 @section API errors
 
-The fast download API can return several errors. The package translates them into user-friendly messages:
+The fast download API can return several errors. The package translates them into user-friendly messages: @*
 
 @multitable {aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa} {aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
 @headitem API error
@@ -414,7 +413,7 @@ The fast download API can return several errors. The package translates them int
 @node Reporting issues
 @section Reporting issues
 
-If you encounter problems not covered here, please open an issue on the @uref{https://github.com/benthamite/annas-archive, GitHub repository}.
+If you encounter problems not covered here, please open an issue on the @uref{https://github.com/benthamite/annas-archive, GitHub repository}. @*
 
 @node Indices
 @chapter Indices

@@ -17,7 +17,7 @@ This manual describes the features and customization options for the Emacs Lisp 
 :CUSTOM_ID: h:overview
 :END:
 
-=annas-archive.el= provides Emacs integration for [[https://annas-archive.li/][Anna's Archive]], the largest search engine for shadow libraries. It lets you search for books and papers by title, ISBN, or DOI, browse results in a formatted completion interface, and download files---all without leaving Emacs.
+=annas-archive.el= provides Emacs integration for [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Anna's Archive]], the largest search engine for shadow libraries. It lets you search for books and papers by title, ISBN, or DOI, browse results in a formatted completion interface, and download files---all without leaving Emacs.
 
 The development repository is on [[https://github.com/benthamite/annas-archive][GitHub]].
 
@@ -53,7 +53,7 @@ If you were using ~annas-archive-use-fast-download-links~ and/or ~annas-archive-
 (setq annas-archive-use-eww t)
 
 ;; After:
-(setq annas-archive-secret-key "YOUR_SECRET_KEY")
+(setopt annas-archive-secret-key "YOUR_SECRET_KEY")
 #+end_src
 
 To find your key, log into Anna's Archive with your paid membership and visit your [[https://annas-archive.li/account/][account page]]. Both ~annas-archive-use-fast-download-links~ and ~annas-archive-use-eww~ are now obsolete.
@@ -150,7 +150,7 @@ The user option ~annas-archive-included-file-types~ specifies which file extensi
 If you only want PDF and EPUB results, for example:
 
 #+begin_src emacs-lisp
-(setq annas-archive-included-file-types '("pdf" "epub"))
+(setopt annas-archive-included-file-types '("pdf" "epub"))
 #+end_src
 
 The user option ~annas-archive-retry-with-all-file-types~ controls whether the package automatically retries a search with all supported file types when the filtered search returns no results. When set to ~t~ (the default), the package prompts with a =y-or-n= question before retrying. Set it to ~nil~ to disable this behavior.
@@ -287,7 +287,7 @@ The function ~annas-archive-select-and-open-url~ is an ~eww-after-render-hook~ c
 Anna's Archive frequently changes its domain name. If the package stops working, check the [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Wikipedia article]] for the current URL and update ~annas-archive-home-url~ accordingly:
 
 #+begin_src emacs-lisp
-(setq annas-archive-home-url "https://NEW-DOMAIN/")
+(setopt annas-archive-home-url "https://NEW-DOMAIN/")
 #+end_src
 
 Note the trailing slash, which is required.
