@@ -19,6 +19,8 @@ This manual describes the features and customization options for the Emacs Lisp 
 
 =annas-archive.el= provides Emacs integration for [[https://annas-archive.li/][Anna's Archive]], the largest search engine for shadow libraries. It lets you search for books and papers by title, ISBN, or DOI, browse results in a formatted completion interface, and download files---all without leaving Emacs.
 
+The development repository is on [[https://github.com/benthamite/annas-archive][GitHub]].
+
 The package works by driving Emacs's built-in =eww= browser behind the scenes to load search results from Anna's Archive, parsing the rendered HTML to extract bibliographic metadata (title, file type, size, language, and year), and presenting the results via ~completing-read~. When the user selects a result, the package navigates to the item page and initiates a download.
 
 Two download mechanisms are available:
