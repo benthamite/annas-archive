@@ -29,6 +29,8 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'url-parse)
+(require 'url-util)
 
 ;;;; Variables
 
@@ -39,11 +41,13 @@
   "URL to Anna’s Archive.
 This address changes regularly; to find the most recent URL, go to
 <https://en.wikipedia.org/wiki/Anna%27s_Archive> and get the link under
-‘External links’.")
+`External links’.")
 
-(defconst annas-archive-download-url-pattern
-  (concat annas-archive-home-url "\\(?:md5\\|scidb\\)/.*")
-  "Regexp pattern for Anna's Archive download page.")
+(defun annas-archive--download-url-pattern ()
+  "Return a regexp matching Anna's Archive download page URLs.
+Computed dynamically from `annas-archive-home-url' so it stays
+in sync if the domain changes."
+  (concat (regexp-quote annas-archive-home-url) "\\(?:md5\\|scidb\\)/.*"))
 
 (defconst annas-archive-fast-download-api-path
   "dyn/api/fast_download.json"
@@ -78,8 +82,9 @@ This address changes regularly; to find the most recent URL, go to
 ;;;;; DOIs
 
 (defconst annas-archive--doi-regexp
-  "\\(10\\.[0-9]\\{4,9\\}\\(/\\)[-._;()/:A-Z0-9]+\\)$"
-  "Regular expression that matches a DOI.")
+  "\\(10\\.[0-9]\\{4,9\\}/[-._;()/:A-Za-z0-9]+\\)$"
+  "Regular expression that matches a DOI.
+Case-insensitive: matches both uppercase and lowercase DOI suffixes.")
 
 ;;;; User options
 
@@ -107,6 +112,11 @@ and visit the account page."
  "Set `annas-archive-secret-key' instead."
  "2026-02-15")
 
+(define-obsolete-variable-alias
+  'annas-archive-when-eww-download-fails
+  'annas-archive-when-download-fails
+  "2026-02-15")
+
 (defcustom annas-archive-when-download-fails 'external
   "What to do when a programmatic download fails.
 If `external' (default), download the file with the default browser. If `error',
@@ -115,11 +125,6 @@ signal an error. Otherwise, fail silently."
                  (const :tag "Signal error" error)
                  (const :tag "Fail silently" nil))
   :group 'annas-archive)
-
-(define-obsolete-variable-alias
-  'annas-archive-when-eww-download-fails
-  'annas-archive-when-download-fails
-  "2026-02-15")
 
 (defcustom annas-archive-downloads-dir
   (expand-file-name "~/Downloads/")
@@ -142,10 +147,10 @@ By default, all supported file extensions are included."
 
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
-The hook is run with the url as its first argument and, when the file was
-downloaded programmatically, the destination path of the downloaded file as its second
-argument."
-  :type 'hook)
+Each function is called with the URL as its first argument and, when the file
+was downloaded programmatically, the destination path as its second argument."
+  :type 'hook
+  :group 'annas-archive)
 
 ;;;;; Column widths
 
@@ -190,12 +195,16 @@ non-interactively, never prompt; signal an error if STRING is nil or empty."
 	   (string (if (called-interactively-p 'interactive)
 		       (read-string prompt)
 		     (annas-archive--require-nonempty-string string)))
-	   (url (annas-archive--url-for-query string)))
-      (add-hook 'eww-after-render-hook
-		(if (annas-archive--doi-p string)
-		    #'annas-archive-download-file
-		  #'annas-archive-select-and-open-url))
-      (eww url))))
+	   (url (annas-archive--url-for-query string))
+	   (hook-fn (if (annas-archive--doi-p string)
+			#'annas-archive-download-file
+		      #'annas-archive-select-and-open-url)))
+      (add-hook 'eww-after-render-hook hook-fn)
+      (condition-case err
+	  (eww url)
+	(error
+	 (remove-hook 'eww-after-render-hook hook-fn)
+	 (signal (car err) (cdr err)))))))
 
 ;;;;; Parsing
 
@@ -203,14 +212,14 @@ non-interactively, never prompt; signal an error if STRING is nil or empty."
   "Return non-nil if STRING is a valid DOI.
 STRING is the user input, typically a DOI like \"10.1145/1458082.1458150\"."
   (and (stringp string)
-       (string-match-p annas-archive--doi-regexp (upcase (string-trim string)))))
+       (string-match-p annas-archive--doi-regexp (string-trim string))))
 
 (defun annas-archive--require-nonempty-string (string)
   "Return STRING trimmed, or signal an error if it is nil or empty.
 STRING is the user input."
   (let ((s (string-trim (or string ""))))
     (if (string-empty-p s)
-	(user-error "STRING must be non-empty when called non-interactively")
+	(user-error "Search string must be non-empty when called non-interactively")
       s)))
 
 (defun annas-archive--url-for-query (string)
@@ -384,7 +393,11 @@ If TYPES is nil, use `annas-archive-included-file-types'."
       (let* ((choice (completing-read "Select a link: " (mapcar #'car cands) nil t))
 	     (url    (cdr (assoc choice cands))))
 	(add-hook 'eww-after-render-hook #'annas-archive-download-file)
-	(eww url)))))
+	(condition-case err
+	    (eww url)
+	  (error
+	   (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
+	   (signal (car err) (cdr err))))))))
 
 (defun annas-archive--format-candidates (results)
   "Return formatted candidates from RESULTS for completion.
@@ -469,7 +482,7 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
   "Ensure that the current `eww' buffer is a download page from Anna’s Archive."
   (if (derived-mode-p 'eww-mode)
       (if-let ((url (plist-get eww-data :url)))
-	  (unless (string-match-p annas-archive-download-url-pattern url)
+	  (unless (string-match-p (annas-archive--download-url-pattern) url)
 	    (user-error "Not on a download page"))
 	(user-error "No URL found"))
     (user-error "Not in an `eww' buffer")))
@@ -518,7 +531,8 @@ Returns the download URL string, or nil on failure."
   (let* ((api-url (format "%s%s?md5=%s&key=%s&path_index=0&domain_index=0"
 			  annas-archive-home-url
 			  annas-archive-fast-download-api-path
-			  md5 annas-archive-secret-key))
+			  (url-hexify-string md5)
+			  (url-hexify-string annas-archive-secret-key)))
 	 (url-request-extra-headers '(("Accept" . "application/json")))
 	 (buffer (url-retrieve-synchronously api-url t nil 30)))
     (when buffer
@@ -544,7 +558,7 @@ Returns the download URL string, or nil on failure."
   "Download the file at URL programmatically within Emacs.
 URL is the URL of the download link, and SPEED is the download speed."
   (url-retrieve url (annas-archive-download-file-callback url))
-  (message (format "Found %s download link. Proceeding to download..." speed)))
+  (message "Found %s download link. Proceeding to download..." speed))
 
 (defun annas-archive-download-file-externally (url)
   "Download the file in URL with the default browser.
@@ -583,13 +597,14 @@ This indicates the server returned a challenge page (e.g. DDoS Guard)
 rather than the expected file."
   (save-excursion
     (goto-char (point-min))
-    (looking-at-p "\\s-*<\\(?:!DOCTYPE\\|[hH][tT][mM][lL]\\)")))
+    (looking-at-p "[ \t\n\r]*<\\(?:!DOCTYPE\\|[hH][tT][mM][lL]\\)")))
 
 (defun annas-archive--extension-from-redirect (redirect)
   "Return a file extension inferred from REDIRECT.
 REDIRECT is the final URL (a string) reported by `url-retrieve'."
   (when (stringp redirect)
-    (file-name-extension redirect)))
+    (file-name-extension (url-file-nondirectory
+			  (car (url-path-and-query (url-generic-parse-url redirect)))))))
 
 (defun annas-archive--extension-from-headers ()
   "Return a file extension inferred from the current buffer’s HTTP headers."
@@ -606,10 +621,14 @@ REDIRECT is the final URL (a string) reported by `url-retrieve'."
   "Return a file extension inferred from URL.
 URL is the original download URL passed to `url-retrieve'."
   (when (stringp url)
-    (file-name-extension url)))
+    (file-name-extension (url-file-nondirectory
+			  (car (url-path-and-query (url-generic-parse-url url)))))))
 
 (defun annas-archive-save-file (url path)
   "Save the file at URL to PATH."
+  (let ((dir (file-name-directory path)))
+    (unless (file-directory-p dir)
+      (make-directory dir t)))
   (let ((coding-system-for-write 'no-conversion))
     (write-region (point-min) (point-max) path))
   (message "Downloaded file: `%s'" path)
@@ -619,13 +638,13 @@ URL is the original download URL passed to `url-retrieve'."
   "Take appropriate action when a programmatic download fails for URL.
 Depending on the value of `annas-archive-when-download-fails', download
 externally, signal an error, or fail silently."
-  (let ((message "Failed to download file programmatically"))
+  (let ((msg "Failed to download file programmatically"))
     (pcase annas-archive-when-download-fails
       ('external
        (annas-archive-download-file-externally url)
-       (message (concat message ". Downloading with the default browser instead")))
-      ('error (user-error message))
-      (_ (message message)))))
+       (message (concat msg ". Downloading with the default browser instead")))
+      ('error (user-error "%s" msg))
+      (_ (message "%s" msg)))))
 
 ;;;; Migration warning
 
