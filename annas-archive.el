@@ -36,12 +36,14 @@
 
 ;;;;; Anna’s Archive
 
-(defconst annas-archive-home-url
-  "https://annas-archive.li/"
+(defcustom annas-archive-home-url
+  "https://annas-archive.gl/"
   "URL to Anna’s Archive.
 This address changes regularly; to find the most recent URL, go to
-<https://en.wikipedia.org/wiki/Anna%27s_Archive> and get the link under
-`External links’.")
+<https://en.wikipedia.org/wiki/Anna%%27s_Archive> and get the link under
+`External links’."
+  :type 'string
+  :group 'annas-archive)
 
 (defun annas-archive--download-url-pattern ()
   "Return a regexp matching Anna's Archive download page URLs.
@@ -494,7 +496,7 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 
 (defun annas-archive--md5-from-url (url)
   "Extract the MD5 hash from an Anna's Archive URL.
-URL is a string like \"https://annas-archive.li/md5/d6e1dc51...\"."
+URL is a string like \"https://annas-archive.gl/md5/d6e1dc51...\"."
   (when (and (stringp url)
 	     (string-match "/md5/\\([0-9a-f]+\\)" url))
     (match-string 1 url)))

@@ -43,7 +43,7 @@ When the search string is a DOI (e.g. =10.1145/1458082.1458150=), the package by
 :CUSTOM_ID: h:breaking-change
 :END:
 
-As of February 2026, Anna's Archive changed their download flow so that the "Download" links on item pages are now JavaScript-driven. This broke the previous =eww=-based download mechanism. Programmatic downloads now use the [[https://annas-archive.li/dyn/api/fast_download.json][fast download JSON API]], which requires a *secret key*.
+As of February 2026, Anna's Archive changed their download flow so that the "Download" links on item pages are now JavaScript-driven. This broke the previous =eww=-based download mechanism. Programmatic downloads now use the [[https://annas-archive.gl/dyn/api/fast_download.json][fast download JSON API]], which requires a *secret key*.
 
 If you were using ~annas-archive-use-fast-download-links~ and/or ~annas-archive-use-eww~, replace them with ~annas-archive-secret-key~:
 
@@ -56,7 +56,7 @@ If you were using ~annas-archive-use-fast-download-links~ and/or ~annas-archive-
 (setopt annas-archive-secret-key "YOUR_SECRET_KEY")
 #+end_src
 
-To find your key, log into Anna's Archive with your paid membership and visit your [[https://annas-archive.li/account/][account page]]. Both ~annas-archive-use-fast-download-links~ and ~annas-archive-use-eww~ are now obsolete.
+To find your key, log into Anna's Archive with your paid membership and visit your [[https://annas-archive.gl/account/][account page]]. Both ~annas-archive-use-fast-download-links~ and ~annas-archive-use-eww~ are now obsolete.
 
 * Installation
 :PROPERTIES:
@@ -116,7 +116,7 @@ If you use ~use-package~, add one of the following snippets to your init file:
 
 The user option ~annas-archive-secret-key~ specifies the secret key for the Anna's Archive fast download API. When set to a non-empty string, it enables programmatic downloads directly within Emacs: the package calls the API to get a direct download URL, retrieves the file asynchronously, and saves it to disk. The default value is ~nil~, which means programmatic downloads are disabled and the package will fall back to opening the download URL in the system browser.
 
-To obtain a secret key, you need a paid [[https://annas-archive.li/donate][membership]] on Anna's Archive. Once logged in, visit the [[https://annas-archive.li/account/][account page]] to find your key.
+To obtain a secret key, you need a paid [[https://annas-archive.gl/donate][membership]] on Anna's Archive. Once logged in, visit the [[https://annas-archive.gl/account/][account page]] to find your key.
 
 The user option ~annas-archive-downloads-dir~ specifies the directory where programmatically downloaded files are saved. The default value is =~/Downloads/=. This option is only relevant when ~annas-archive-secret-key~ is set; external browser downloads go to whatever location the browser is configured to use.
 
@@ -287,7 +287,7 @@ The function ~annas-archive-select-and-open-url~ is an ~eww-after-render-hook~ c
 Anna's Archive frequently changes its domain name. If the package stops working, check the [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Wikipedia article]] for the current URL and update ~annas-archive-home-url~ accordingly:
 
 #+begin_src emacs-lisp
-(setopt annas-archive-home-url "https://NEW-DOMAIN/")
+(setopt annas-archive-home-url "https://NEW-DOMAIN/")  ;; note the trailing slash
 #+end_src
 
 Note the trailing slash, which is required.

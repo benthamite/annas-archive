@@ -115,7 +115,7 @@ When the search string is a DOI (e.g. @samp{10.1145/1458082.1458150}), the packa
 @node Breaking change (February 2026)
 @section Breaking change (February 2026)
 
-As of February 2026, Anna's Archive changed their download flow so that the ``Download'' links on item pages are now JavaScript-driven. This broke the previous @samp{eww}-based download mechanism. Programmatic downloads now use the @uref{https://annas-archive.li/dyn/api/fast_download.json, fast download JSON API}, which requires a @strong{secret key}. @*
+As of February 2026, Anna's Archive changed their download flow so that the ``Download'' links on item pages are now JavaScript-driven. This broke the previous @samp{eww}-based download mechanism. Programmatic downloads now use the @uref{https://annas-archive.gl/dyn/api/fast_download.json, fast download JSON API}, which requires a @strong{secret key}. @*
 
 If you were using @code{annas-archive-use-fast-download-links} and/or @code{annas-archive-use-eww}, replace them with @code{annas-archive-secret-key}: @*
 
@@ -128,7 +128,7 @@ If you were using @code{annas-archive-use-fast-download-links} and/or @code{anna
 (setq annas-archive-secret-key "YOUR_SECRET_KEY")
 @end lisp
 
-To find your key, log into Anna's Archive with your paid membership and visit your @uref{https://annas-archive.li/account/, account page}. Both @code{annas-archive-use-fast-download-links} and @code{annas-archive-use-eww} are now obsolete. @*
+To find your key, log into Anna's Archive with your paid membership and visit your @uref{https://annas-archive.gl/account/, account page}. Both @code{annas-archive-use-fast-download-links} and @code{annas-archive-use-eww} are now obsolete. @*
 
 @node Installation
 @chapter Installation
@@ -190,7 +190,7 @@ If you use @code{use-package}, add one of the following snippets to your init fi
 
 The user option @code{annas-archive-secret-key} specifies the secret key for the Anna's Archive fast download API@. When set to a non-empty string, it enables programmatic downloads directly within Emacs: the package calls the API to get a direct download URL, retrieves the file asynchronously, and saves it to disk. The default value is @code{nil}, which means programmatic downloads are disabled and the package will fall back to opening the download URL in the system browser. @*
 
-To obtain a secret key, you need a paid @uref{https://annas-archive.li/donate, membership} on Anna's Archive. Once logged in, visit the @uref{https://annas-archive.li/account/, account page} to find your key. @*
+To obtain a secret key, you need a paid @uref{https://annas-archive.gl/donate, membership} on Anna's Archive. Once logged in, visit the @uref{https://annas-archive.gl/account/, account page} to find your key. @*
 
 The user option @code{annas-archive-downloads-dir} specifies the directory where programmatically downloaded files are saved. The default value is @samp{~/Downloads/}. This option is only relevant when @code{annas-archive-secret-key} is set; external browser downloads go to whatever location the browser is configured to use. @*
 
@@ -378,7 +378,7 @@ The function @code{annas-archive-select-and-open-url} is an @code{eww-after-rend
 Anna's Archive frequently changes its domain name. If the package stops working, check the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article} for the current URL and update @code{annas-archive-home-url} accordingly: @*
 
 @lisp
-(setq annas-archive-home-url "https://NEW-DOMAIN/")
+(setopt annas-archive-home-url "https://NEW-DOMAIN/")
 @end lisp
 
 Note the trailing slash, which is required. @*
