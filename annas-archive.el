@@ -305,7 +305,8 @@ titles."
 (defun annas-archive--md5-url-p (url)
   "Return non-nil if URL appears to be an Anna’s Archive item (md5) page."
   (and (stringp url)
-       (string-match-p "/md5/[0-9a-f]\\{8,\\}" url)))
+       (let ((case-fold-search nil))
+         (string-match-p "/md5/[0-9a-f]\\{8,\\}" url))))
 
 (defun annas-archive--info-in-order ()
   "Return a list of plists with details in the visual order of the hits.
@@ -497,9 +498,10 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
 (defun annas-archive--md5-from-url (url)
   "Extract the MD5 hash from an Anna's Archive URL.
 URL is a string like \"https://annas-archive.gl/md5/d6e1dc51...\"."
-  (when (and (stringp url)
-	     (string-match "/md5/\\([0-9a-f]+\\)" url))
-    (match-string 1 url)))
+  (when (stringp url)
+    (let ((case-fold-search nil))
+      (when (string-match "/md5/\\([0-9a-f]+\\)" url)
+        (match-string 1 url)))))
 
 (defun annas-archive--md5-from-page ()
   "Extract the first MD5 hash from links in the current eww buffer.

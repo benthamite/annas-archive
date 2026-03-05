@@ -164,9 +164,9 @@ Point starts at `point-min'."
   (should (annas-archive--md5-url-p "/md5/abcdef01"))
   (should-not (annas-archive--md5-url-p "/md5/abcdef0")))
 
-(ert-deftest annas-archive-test-md5-url-p-accepts-uppercase ()
-  "MD5 URL pattern accepts uppercase hex (case-fold-search is t by default)."
-  (should (annas-archive--md5-url-p "/md5/ABCDEF01")))
+(ert-deftest annas-archive-test-md5-url-p-rejects-uppercase ()
+  "MD5 URL pattern should reject uppercase hex (MD5 hashes are lowercase)."
+  (should-not (annas-archive--md5-url-p "/md5/ABCDEF01")))
 
 (ert-deftest annas-archive-test-md5-url-p-rejects-nil ()
   "Nil should return nil without crashing."
@@ -693,6 +693,61 @@ Point starts at `point-min'."
   (should-not (string-match-p annas-archive--doi-regexp "978-0-06-112008-4"))
   (should-not (string-match-p annas-archive--doi-regexp "hello world"))
   (should-not (string-match-p annas-archive--doi-regexp "10.12/x")))
+
+;;;; save-file (filesystem)
+
+(ert-deftest annas-archive-test-save-file-writes-content ()
+  "Should write buffer contents to the specified path."
+  (let* ((dir (make-temp-file "annas-archive-test-" t))
+         (path (file-name-concat dir "test-book.pdf"))
+         (hook-called nil)
+         (annas-archive-post-download-hook
+          (list (lambda (url fpath)
+                  (setq hook-called (list url fpath))))))
+    (unwind-protect
+        (with-temp-buffer
+          (insert "fake pdf content")
+          (annas-archive-save-file "https://example.com/file.pdf" path)
+          ;; File should exist with correct content
+          (should (file-exists-p path))
+          (should (equal (with-temp-buffer
+                           (insert-file-contents-literally path)
+                           (buffer-string))
+                         "fake pdf content"))
+          ;; Hook should have been called with url and path
+          (should (equal hook-called (list "https://example.com/file.pdf" path))))
+      (delete-directory dir t))))
+
+(ert-deftest annas-archive-test-save-file-creates-parent-dirs ()
+  "Should create parent directories if they don't exist."
+  (let* ((dir (make-temp-file "annas-archive-test-" t))
+         (path (file-name-concat dir "sub" "dir" "book.epub")))
+    (unwind-protect
+        (with-temp-buffer
+          (insert "fake epub")
+          (let ((annas-archive-post-download-hook nil))
+            (annas-archive-save-file "https://example.com/x" path))
+          (should (file-exists-p path)))
+      (delete-directory dir t))))
+
+(ert-deftest annas-archive-test-save-file-binary-content ()
+  "Should preserve binary content without encoding conversion."
+  (let* ((dir (make-temp-file "annas-archive-test-" t))
+         (path (file-name-concat dir "binary.pdf"))
+         (binary-content (unibyte-string ?% ?P ?D ?F 0 1 2 255 254 253)))
+    (unwind-protect
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert binary-content)
+          (let ((annas-archive-post-download-hook nil))
+            (annas-archive-save-file "https://example.com/x" path))
+          (should (file-exists-p path))
+          (let ((saved (with-temp-buffer
+                         (set-buffer-multibyte nil)
+                         (insert-file-contents-literally path)
+                         (buffer-string))))
+            (should (equal saved binary-content))))
+      (delete-directory dir t))))
 
 ;;;; Supported file types constant
 
