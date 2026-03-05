@@ -16,7 +16,7 @@ jobs:
           - snapshot
     steps:
       - uses: actions/checkout@v4
-      - uses: purcell/setup-emacs@v6.0
+      - uses: purcell/setup-emacs@v7.0
         with:
           version: ${{ matrix.emacs-version }}
       - name: Byte-compile
