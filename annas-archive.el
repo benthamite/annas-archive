@@ -183,6 +183,16 @@ was downloaded programmatically, the destination path as its second argument."
 
 ;;;; Functions
 
+(defun annas-archive--eww-with-hook (url hook-fn)
+  "Browse URL in eww with HOOK-FN on `eww-after-render-hook’.
+If `eww’ signals an error, remove HOOK-FN and re-signal."
+  (add-hook 'eww-after-render-hook hook-fn)
+  (condition-case err
+      (eww url)
+    (error
+     (remove-hook 'eww-after-render-hook hook-fn)
+     (signal (car err) (cdr err)))))
+
 ;;;###autoload
 (defun annas-archive-download (&optional string)
   "Search Anna’s Archive for STRING and download the selected item.
@@ -201,12 +211,7 @@ non-interactively, never prompt; signal an error if STRING is nil or empty."
 	   (hook-fn (if (annas-archive--doi-p string)
 			#'annas-archive-download-file
 		      #'annas-archive-select-and-open-url)))
-      (add-hook 'eww-after-render-hook hook-fn)
-      (condition-case err
-	  (eww url)
-	(error
-	 (remove-hook 'eww-after-render-hook hook-fn)
-	 (signal (car err) (cdr err)))))))
+      (annas-archive--eww-with-hook url hook-fn))))
 
 ;;;;; Parsing
 
@@ -240,8 +245,8 @@ TITLE is taken from the MD5 link whose visible text is not \"*\".
 TYPE is a lowercase extension like \"pdf\" or \"epub\"."
   (let* ((links (annas-archive-get-links))
          (mappings (annas-archive--build-url-mappings links))
-         (url->titles (car mappings))
-         (star-urls (cdr mappings)))
+         (url->titles (plist-get mappings :url->titles))
+         (star-urls (plist-get mappings :star-urls)))
     (annas-archive--combine-url-info star-urls url->titles)))
 
 (defun annas-archive-get-links ()
@@ -270,8 +275,8 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
 
 (defun annas-archive--build-url-mappings (links)
   "Build URL mappings from LINKS.
-Return a cons cell (URL->TITLES . STAR-URLS) where URL->TITLES is a hash table
-mapping URLs to lists of titles, and STAR-URLS is a list of URLs in order."
+Return a plist with :url->titles (a hash table mapping URLs to lists of titles)
+and :star-urls (a list of URLs in order)."
   (let ((url->titles (make-hash-table :test 'equal))
         (star-urls '()))
     (dolist (cons links)
@@ -283,7 +288,7 @@ mapping URLs to lists of titles, and STAR-URLS is a list of URLs in order."
           (when (and (string= title "*")
                      (not (member url star-urls)))
             (setq star-urls (append star-urls (list url)))))))
-    (cons url->titles star-urls)))
+    (list :url->titles url->titles :star-urls star-urls)))
 
 (defun annas-archive--combine-url-info (star-urls url->titles)
   "Combine URL information with extracted metadata.
@@ -395,12 +400,7 @@ If TYPES is nil, use `annas-archive-included-file-types'."
 	(user-error "No matching results for types: %s" wanted)
       (let* ((choice (completing-read "Select a link: " (mapcar #'car cands) nil t))
 	     (url    (cdr (assoc choice cands))))
-	(add-hook 'eww-after-render-hook #'annas-archive-download-file)
-	(condition-case err
-	    (eww url)
-	  (error
-	   (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
-	   (signal (car err) (cdr err))))))))
+	(annas-archive--eww-with-hook url #'annas-archive-download-file)))))
 
 (defun annas-archive--format-candidates (results)
   "Return formatted candidates from RESULTS for completion.
@@ -456,6 +456,21 @@ spaces."
 (defvar eww-data)
 (defvar url-request-extra-headers)
 (autoload 'browse-url-default-browser "browse-url")
+(defun annas-archive--attempt-download (page-url)
+  "Attempt to download the file for PAGE-URL.
+Check for server errors, extract the MD5 hash, and either use the
+fast download API or handle the failure."
+  (goto-char (point-min))
+  (if (re-search-forward "Our servers are not responding" nil t)
+      (message "Servers are not responding. Please try again later.")
+    (let* ((md5 (or (annas-archive--md5-from-url page-url)
+		    (annas-archive--md5-from-page)))
+	   (api-download-url (when (and md5 (annas-archive--use-fast-download-api-p))
+			       (annas-archive--fast-download-api md5))))
+      (if api-download-url
+	  (annas-archive-download-file-internally api-download-url)
+	(annas-archive-handle-download-failure page-url)))))
+
 (defun annas-archive-download-file (&optional interactive)
   "Download the file in the current eww buffer page.
 If called interactively, or INTERACTIVE is non-nil, display a message indicating
@@ -466,19 +481,11 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
   (save-window-excursion
     (let ((buffer (current-buffer))
 	  (page-url (plist-get eww-data :url)))
-      (goto-char (point-min))
-      (if (re-search-forward "Our servers are not responding" nil t)
-	  (message "Servers are not responding. Please try again later.")
-	(let* ((md5 (or (annas-archive--md5-from-url page-url)
-		       (annas-archive--md5-from-page)))
-	       (api-download-url (when (and md5 (annas-archive--use-fast-download-api-p))
-				   (annas-archive--fast-download-api md5))))
-	  (if api-download-url
-	      (annas-archive-download-file-internally api-download-url "fast")
-	    (annas-archive-handle-download-failure page-url))))
+      (annas-archive--attempt-download page-url)
       (if interactive
-	  (message "File will be downloaded to `%s'" annas-archive-downloads-dir)
+	  (message "File will be downloaded to `%s’" annas-archive-downloads-dir)
 	(kill-buffer buffer)))))
+
 
 ;;;###autoload
 (defun annas-archive-ensure-download-page ()
@@ -558,11 +565,10 @@ Returns the download URL string, or nil on failure."
 		 nil))))
 	(kill-buffer buffer)))))
 
-(defun annas-archive-download-file-internally (url speed)
-  "Download the file at URL programmatically within Emacs.
-URL is the URL of the download link, and SPEED is the download speed."
+(defun annas-archive-download-file-internally (url)
+  "Download the file at URL programmatically within Emacs."
   (url-retrieve url (annas-archive-download-file-callback url))
-  (message "Found %s download link. Proceeding to download..." speed))
+  (message "Found download link. Proceeding to download..."))
 
 (defun annas-archive-download-file-externally (url)
   "Download the file in URL with the default browser.
@@ -578,7 +584,7 @@ URL is the download URL passed to `url-retrieve'."
     (if-let ((err (plist-get status :error)))
 	(message "Download failed: %s" err)
       (let* ((redirect (plist-get status :redirect))
-	     (extension (or (annas-archive--extension-from-redirect redirect)
+	     (extension (or (annas-archive--extension-from-url redirect)
 			    (annas-archive--extension-from-headers)
 			    (annas-archive--extension-from-url url)
 			    "pdf")))
@@ -603,17 +609,12 @@ rather than the expected file."
     (goto-char (point-min))
     (looking-at-p "[ \t\n\r]*<\\(?:!DOCTYPE\\|[hH][tT][mM][lL]\\)")))
 
-(defun annas-archive--extension-from-redirect (redirect)
-  "Return a file extension inferred from REDIRECT.
-REDIRECT is the final URL (a string) reported by `url-retrieve'."
-  (when (stringp redirect)
-    (file-name-extension (url-file-nondirectory
-			  (car (url-path-and-query (url-generic-parse-url redirect)))))))
-
 (defun annas-archive--extension-from-headers ()
   "Return a file extension inferred from the current buffer’s HTTP headers."
   (save-excursion
     (goto-char (point-min))
+    ;; Only the most common MIME types are mapped here; uncommon types
+    ;; (djvu, mobi, fb2, etc.) fall through to URL-based detection.
     (when (re-search-forward "^Content-Type:[ \t]*\\([^;\n]+\\)" nil t)
       (pcase (downcase (string-trim (match-string 1)))
 	("application/pdf" "pdf")

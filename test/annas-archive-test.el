@@ -295,29 +295,6 @@ Point starts at `point-min'."
   (annas-archive-test--with-block "HTTP/1.1 200 OK\nX-Custom: foo\n\n"
     (should-not (annas-archive--extension-from-headers))))
 
-;;;; Extension from redirect URL
-
-(ert-deftest annas-archive-test-extension-from-redirect-pdf ()
-  "PDF extension should be extracted from redirect URL."
-  (should (equal (annas-archive--extension-from-redirect
-                  "https://cdn.example.com/files/book.pdf")
-                 "pdf")))
-
-(ert-deftest annas-archive-test-extension-from-redirect-epub ()
-  "EPUB extension should be extracted from redirect URL."
-  (should (equal (annas-archive--extension-from-redirect
-                  "https://cdn.example.com/files/book.epub")
-                 "epub")))
-
-(ert-deftest annas-archive-test-extension-from-redirect-nil ()
-  "Nil redirect should return nil."
-  (should-not (annas-archive--extension-from-redirect nil)))
-
-(ert-deftest annas-archive-test-extension-from-redirect-no-extension ()
-  "URL without extension should return nil."
-  (should-not (annas-archive--extension-from-redirect
-               "https://cdn.example.com/download/abc123")))
-
 ;;;; Extension from URL
 
 (ert-deftest annas-archive-test-extension-from-url-pdf ()
@@ -326,9 +303,20 @@ Point starts at `point-min'."
                   "https://download.example.com/file.pdf")
                  "pdf")))
 
+(ert-deftest annas-archive-test-extension-from-url-epub ()
+  "EPUB extension should be extracted from URL."
+  (should (equal (annas-archive--extension-from-url
+                  "https://cdn.example.com/files/book.epub")
+                 "epub")))
+
 (ert-deftest annas-archive-test-extension-from-url-nil ()
   "Nil should return nil."
   (should-not (annas-archive--extension-from-url nil)))
+
+(ert-deftest annas-archive-test-extension-from-url-no-extension ()
+  "URL without extension should return nil."
+  (should-not (annas-archive--extension-from-url
+               "https://cdn.example.com/download/abc123")))
 
 ;;;; Truncation and padding
 
@@ -561,8 +549,8 @@ Point starts at `point-min'."
                   ("*" . "https://annas-archive.gl/md5/1234567890abcdef")
                   ("External" . "https://example.com/other")))
          (result (annas-archive--build-url-mappings links))
-         (url->titles (car result))
-         (star-urls (cdr result)))
+         (url->titles (plist-get result :url->titles))
+         (star-urls (plist-get result :star-urls)))
     ;; Two star URLs in order
     (should (= (length star-urls) 2))
     (should (equal (nth 0 star-urls) "https://annas-archive.gl/md5/abc12345def67890"))
@@ -578,7 +566,7 @@ Point starts at `point-min'."
                   ("Title" . "https://x.com/md5/abcdef01")
                   ("*" . "https://x.com/md5/abcdef01")))
          (result (annas-archive--build-url-mappings links))
-         (star-urls (cdr result)))
+         (star-urls (plist-get result :star-urls)))
     (should (= (length star-urls) 1))))
 
 ;;;; Combine URL info
