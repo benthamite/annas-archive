@@ -1,6 +1,6 @@
 ;;; annas-archive.el --- Rudimentary integration for Anna’s Archive -*- lexical-binding: t -*-
 
-;; Copyright (C) 2024
+;; Copyright (C) 2024-2026 Pablo Stafforini
 
 ;; Author: Pablo Stafforini
 ;; URL: https://github.com/benthamite/annas-archive
