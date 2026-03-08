@@ -2,6 +2,8 @@
 
 `annas-archive` provides Emacs integration for [Anna's Archive](https://en.wikipedia.org/wiki/Anna%27s_Archive), the largest search engine for shadow libraries. Search for books and papers by title, ISBN, or DOI, browse results in a formatted completion interface, and download files — all without leaving Emacs.
 
+![demo](demo.gif)
+
 The package drives `eww` behind the scenes to load and parse search results, extracting bibliographic metadata (title, file type, size, language, year) and presenting them via `completing-read`. When you select a result, it navigates to the item page and initiates the download. For academic papers, you can search by DOI and skip straight to the download.
 
 Two download mechanisms are available:
