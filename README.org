@@ -9,6 +9,7 @@
 #+texinfo_dir_category: Emacs misc features
 #+texinfo_dir_title: Anna's Archive: (annas-archive)
 #+texinfo_dir_desc: Search and download from Anna's Archive
+#+texinfo_header: @c AUTO-GENERATED from README.org via ox-texinfo — do not edit manually.
 
 This manual describes the features and customization options for the Emacs Lisp file =annas-archive.el=.
 
