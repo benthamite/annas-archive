@@ -15,24 +15,25 @@ The package depends only on libraries bundled with Emacs (`cl-lib`, `json`, `url
 
 ## Installation
 
-**package-vc** (built-in since Emacs 30):
-
-```emacs-lisp
-(package-vc-install "https://github.com/benthamite/annas-archive")
-```
-
-**Elpaca**:
+### package-vc (built-in since Emacs 30)
 
 ```emacs-lisp
 (use-package annas-archive
-  :ensure (annas-archive :host github :repo "benthamite/annas-archive"))
+  :vc (:url "https://github.com/benthamite/annas-archive"))
 ```
 
-**straight.el**:
+### Elpaca
 
 ```emacs-lisp
-(straight-use-package
- '(annas-archive :type git :host github :repo "benthamite/annas-archive"))
+(use-package annas-archive
+  :ensure (:host github :repo "benthamite/annas-archive"))
+```
+
+### straight.el
+
+```emacs-lisp
+(use-package annas-archive
+  :straight (:host github :repo "benthamite/annas-archive"))
 ```
 
 ## Quick start
