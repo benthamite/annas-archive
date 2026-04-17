@@ -50,7 +50,7 @@ Run `M-x annas-archive-download`, enter a title, ISBN, or DOI, pick a result fro
 
 ## Documentation
 
-For a comprehensive description of all user options, commands, and functions, see the [manual](README.org).
+For a comprehensive description of all user options, commands, and functions, see the [manual](https://stafforini.com/notes/annas-archive/).
 
 ## License
 
