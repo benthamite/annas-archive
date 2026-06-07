@@ -19,13 +19,14 @@ Point starts at `point-min'."
      (goto-char (point-min))
      ,@body))
 
-(defmacro annas-archive-test--with-home-url (url &rest body)
-  "Bind `annas-archive-home-url' to URL and evaluate BODY."
+(defmacro annas-archive-test--with-home-url-override (url &rest body)
+  "Bind `annas-archive-home-url-override' to URL and evaluate BODY."
   (declare (indent 1))
-  `(let ((annas-archive-home-url ,url))
+  `(let ((annas-archive-home-url-override ,url)
+	 (annas-archive--home-url-cache nil))
      ,@body))
 
-;;;; Wikipedia URL updater
+;;;; Wikipedia URL resolution
 
 (ert-deftest annas-archive-test-wikipedia-extracts-first-infobox-url ()
   "The first Anna's Archive infobox URL should be selected."
@@ -60,35 +61,45 @@ Point starts at `point-min'."
     (should (equal (annas-archive--wikipedia-wikitext-from-json json)
 		   "WIKI"))))
 
-(ert-deftest annas-archive-test-update-home-url-default-in-file ()
-  "The package source default should be rewritten to the new URL."
-  (let ((file (make-temp-file "annas-archive-test-" nil ".el")))
-    (unwind-protect
-	(progn
-	  (with-temp-file file
-	    (insert "(defcustom annas-archive-home-url\n")
-	    (insert "  \"https://annas-archive.gl/\"\n")
-	    (insert "  \"URL to Anna's Archive.\")\n"))
-	  (should (annas-archive--update-home-url-default-in-file
-		   file "https://annas-archive.pk/"))
-	  (should (equal (with-temp-buffer
-			   (insert-file-contents file)
-			   (buffer-string))
-			 "(defcustom annas-archive-home-url\n  \"https://annas-archive.pk/\"\n  \"URL to Anna's Archive.\")\n")))
-      (delete-file file))))
+(ert-deftest annas-archive-test-home-url-uses-override ()
+  "An explicit home URL override should be used before Wikipedia."
+  (annas-archive-test--with-home-url-override "https://annas-archive.gd"
+    (cl-letf (((symbol-function 'annas-archive--wikipedia-home-url)
+	       (lambda () (error "Wikipedia should not be consulted"))))
+      (should (equal (annas-archive--home-url)
+		     "https://annas-archive.gd/")))))
 
-(ert-deftest annas-archive-test-update-home-url-default-in-file-no-change ()
-  "Rewriting the package source to the same URL should report no change."
-  (let ((file (make-temp-file "annas-archive-test-" nil ".el")))
+(ert-deftest annas-archive-test-obsolete-home-url-is-not-override ()
+  "The old home URL option should not silently override Wikipedia."
+  (should-not (eq (indirect-variable 'annas-archive-home-url)
+		  'annas-archive-home-url-override))
+  (let ((old-home-url (and (boundp 'annas-archive-home-url)
+			   (symbol-value 'annas-archive-home-url)))
+	(old-override annas-archive-home-url-override)
+	(annas-archive--home-url-cache nil))
     (unwind-protect
 	(progn
-	  (with-temp-file file
-	    (insert "(defcustom annas-archive-home-url\n")
-	    (insert "  \"https://annas-archive.pk/\"\n")
-	    (insert "  \"URL to Anna's Archive.\")\n"))
-	  (should-not (annas-archive--update-home-url-default-in-file
-		       file "https://annas-archive.pk/")))
-      (delete-file file))))
+	  (set 'annas-archive-home-url "https://annas-archive.gd/")
+	  (setq annas-archive-home-url-override nil)
+	  (cl-letf (((symbol-function 'annas-archive--wikipedia-home-url)
+		     (lambda () "https://annas-archive.pk/")))
+	    (should (equal (annas-archive--home-url)
+			   "https://annas-archive.pk/"))))
+      (set 'annas-archive-home-url old-home-url)
+      (setq annas-archive-home-url-override old-override))))
+
+(ert-deftest annas-archive-test-home-url-caches-wikipedia-result ()
+  "Wikipedia should be consulted once per session cache."
+  (let ((annas-archive-home-url-override nil)
+	(annas-archive--home-url-cache nil)
+	(calls 0))
+    (cl-letf (((symbol-function 'annas-archive--wikipedia-home-url)
+	       (lambda ()
+		 (setq calls (1+ calls))
+		 "https://annas-archive.pk/")))
+      (should (equal (annas-archive--home-url) "https://annas-archive.pk/"))
+      (should (equal (annas-archive--home-url) "https://annas-archive.pk/"))
+      (should (= calls 1)))))
 
 ;;;; DOI validation
 
@@ -158,33 +169,33 @@ Point starts at `point-min'."
 
 (ert-deftest annas-archive-test-url-for-query-search ()
   "Regular search terms should produce a search URL."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (let ((url (annas-archive--url-for-query "The Great Gatsby")))
       (should (string-prefix-p "https://annas-archive.gl/search?q=" url))
       (should (string-match-p "Great" url)))))
 
 (ert-deftest annas-archive-test-url-for-query-doi ()
   "A DOI should produce a SciDB URL."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should (equal (annas-archive--url-for-query "10.1145/1458082.1458150")
                    "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
 
 (ert-deftest annas-archive-test-url-for-query-trims-input ()
   "Surrounding whitespace should be trimmed before URL construction."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should (equal (annas-archive--url-for-query "  10.1145/1458082.1458150  ")
                    "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
 
 (ert-deftest annas-archive-test-url-for-query-encodes-special-chars ()
   "Special characters in search queries should be URL-encoded."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (let ((url (annas-archive--url-for-query "foo bar&baz")))
       (should-not (string-match-p " " url))
       (should-not (string-match-p "&baz" url)))))
 
 (ert-deftest annas-archive-test-url-for-query-custom-domain ()
-  "URL should use the custom domain from `annas-archive-home-url'."
-  (annas-archive-test--with-home-url "https://annas-archive.li/"
+  "URL should use the custom domain from `annas-archive-home-url-override'."
+  (annas-archive-test--with-home-url-override "https://annas-archive.li/"
     (should (string-prefix-p "https://annas-archive.li/search?q="
                              (annas-archive--url-for-query "test")))))
 
@@ -192,28 +203,28 @@ Point starts at `point-min'."
 
 (ert-deftest annas-archive-test-download-url-pattern-matches-md5 ()
   "Pattern should match md5 download page URLs."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should (string-match-p
              (annas-archive--download-url-pattern)
              "https://annas-archive.gl/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4"))))
 
 (ert-deftest annas-archive-test-download-url-pattern-matches-scidb ()
   "Pattern should match scidb download page URLs."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should (string-match-p
              (annas-archive--download-url-pattern)
              "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
 
 (ert-deftest annas-archive-test-download-url-pattern-rejects-search ()
   "Pattern should NOT match search page URLs."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should-not (string-match-p
                  (annas-archive--download-url-pattern)
                  "https://annas-archive.gl/search?q=foobar"))))
 
 (ert-deftest annas-archive-test-download-url-pattern-rejects-other-domain ()
   "Pattern should NOT match URLs from different domains."
-  (annas-archive-test--with-home-url "https://annas-archive.gl/"
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should-not (string-match-p
                  (annas-archive--download-url-pattern)
                  "https://example.com/md5/abc123"))))

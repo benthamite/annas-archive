@@ -36,19 +36,29 @@
 
 ;;;;; Anna’s Archive
 
-(defcustom annas-archive-home-url
-  "https://annas-archive.pk/"
-  "URL to Anna’s Archive.
-This address changes regularly. Maintainers can update the package default with
-`annas-archive-update-home-url-default'."
-  :type 'string
+(defvar annas-archive-home-url nil
+  "Obsolete URL to Anna's Archive.")
+
+(make-obsolete-variable
+ 'annas-archive-home-url
+ "Anna's Archive URLs are resolved dynamically. Set `annas-archive-home-url-override' only for temporary manual overrides."
+ "2026-06-07")
+
+(defcustom annas-archive-home-url-override nil
+  "Override URL to Anna's Archive.
+When nil, resolve the current URL from Wikipedia and cache it for the current
+Emacs session."
+  :type '(choice (const :tag "Resolve from Wikipedia" nil) string)
   :group 'annas-archive)
+
+(defvar annas-archive--home-url-cache nil
+  "Cached Anna's Archive home URL for the current Emacs session.")
 
 (defun annas-archive--download-url-pattern ()
   "Return a regexp matching Anna's Archive download page URLs.
-Computed dynamically from `annas-archive-home-url' so it stays
-in sync if the domain changes."
-  (concat (regexp-quote annas-archive-home-url) "\\(?:md5\\|scidb\\)/.*"))
+Computed dynamically from `annas-archive--home-url' so it stays in sync if the
+domain changes."
+  (concat (regexp-quote (annas-archive--home-url)) "\\(?:md5\\|scidb\\)/.*"))
 
 (defconst annas-archive-fast-download-api-path
   "dyn/api/fast_download.json"
@@ -57,10 +67,6 @@ in sync if the domain changes."
 (defconst annas-archive--wikipedia-api-url
   "https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Anna%27s_Archive&rvprop=content&rvslots=main&format=json&formatversion=2"
   "MediaWiki API URL for the Anna's Archive article wikitext.")
-
-(defconst annas-archive--loaded-source-file
-  (or load-file-name buffer-file-name)
-  "Source file from which annas-archive was loaded.")
 
 (defconst annas-archive-supported-file-types
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
@@ -239,50 +245,24 @@ STRING is the user input."
 (defun annas-archive--url-for-query (string)
   "Return the Anna’s Archive URL to use for STRING.
 If STRING is a DOI, return the SciDB URL. Otherwise, return the search URL."
-  (let ((s (string-trim (or string ""))))
+  (let ((s (string-trim (or string "")))
+	(home-url (annas-archive--home-url)))
     (if (annas-archive--doi-p s)
-	(concat annas-archive-home-url "scidb/" s)
-      (concat annas-archive-home-url "search?q=" (url-hexify-string s)))))
+	(concat home-url "scidb/" s)
+      (concat home-url "search?q=" (url-hexify-string s)))))
 
-(defun annas-archive-update-home-url-default (&optional file)
-  "Update `annas-archive-home-url' default in FILE from Wikipedia.
-FILE defaults to the source file from which this package was loaded."
-  (interactive)
-  (let* ((url (annas-archive--wikipedia-home-url))
-	 (target (or file (annas-archive--source-file)))
-	 (changed (annas-archive--update-home-url-default-in-file target url)))
-    (message "%s annas-archive-home-url default: %s"
-	     (if changed "Updated" "Unchanged")
-	     url)
-    url))
+(defun annas-archive--home-url ()
+  "Return the Anna's Archive home URL for this session."
+  (annas-archive--normalize-home-url
+   (or annas-archive-home-url-override
+       annas-archive--home-url-cache
+       (setq annas-archive--home-url-cache
+	     (annas-archive--wikipedia-home-url)))))
 
 (defun annas-archive--wikipedia-home-url ()
   "Return the current Anna's Archive home URL from Wikipedia."
   (annas-archive--wikipedia-home-url-from-wikitext
    (annas-archive--wikipedia-wikitext)))
-
-(defun annas-archive--source-file ()
-  "Return the package source file to rewrite."
-  (unless annas-archive--loaded-source-file
-    (user-error "Could not determine annas-archive source file"))
-  (if (string-suffix-p ".elc" annas-archive--loaded-source-file)
-      (concat (file-name-sans-extension annas-archive--loaded-source-file) ".el")
-    annas-archive--loaded-source-file))
-
-(defun annas-archive--update-home-url-default-in-file (file url)
-  "Update `annas-archive-home-url' default in FILE to URL.
-Return non-nil if FILE changed."
-  (let ((url (annas-archive--normalize-home-url url)))
-    (with-temp-buffer
-      (insert-file-contents file)
-      (goto-char (point-min))
-      (unless (re-search-forward "(defcustom[ \t\n]+annas-archive-home-url[ \t\n]+\"\\([^\"]+\\)\"" nil t)
-	(user-error "Could not find annas-archive-home-url default in %s" file))
-      (if (equal (match-string 1) url)
-	  nil
-	(replace-match url t t nil 1)
-	(write-region (point-min) (point-max) file nil 'silent)
-	t))))
 
 (defun annas-archive--wikipedia-home-url-from-wikitext (wikitext)
   "Return the first Anna's Archive infobox URL in WIKITEXT."
@@ -635,7 +615,7 @@ such as on SciDB pages for DOI lookups."
   "Return a direct download URL for MD5 using the fast download API.
 Returns the download URL string, or nil on failure."
   (let* ((api-url (format "%s%s?md5=%s&key=%s&path_index=0&domain_index=0"
-			  annas-archive-home-url
+			  (annas-archive--home-url)
 			  annas-archive-fast-download-api-path
 			  (url-hexify-string md5)
 			  (url-hexify-string annas-archive-secret-key)))

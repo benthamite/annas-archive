@@ -52,6 +52,7 @@ Installation
 
 User options
 
+* Domain resolution::
 * Download options::
 * Download failure handling::
 * Search filtering::
@@ -177,11 +178,21 @@ If you use @code{use-package}, add one of the following snippets to your init fi
 @chapter User options
 
 @menu
+* Domain resolution::
 * Download options::
 * Download failure handling::
 * Search filtering::
 * Column widths::
 @end menu
+
+@node Domain resolution
+@section Domain resolution
+
+@vindex annas-archive-home-url-override
+
+The package resolves the current Anna's Archive URL from the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article} on first use and caches it for the rest of the Emacs session. Normally you do not need to configure the home URL@.
+
+The user option @code{annas-archive-home-url-override} can be set to a URL string when you need to bypass Wikipedia temporarily, for example during a Wikipedia outage or while testing a specific mirror. The default value is @code{nil}.
 
 @node Download options
 @section Download options
@@ -377,14 +388,9 @@ The function @code{annas-archive-select-and-open-url} is an @code{eww-after-rend
 @node Anna's Archive domain changes
 @section Anna's Archive domain changes
 
-Anna's Archive frequently changes its domain name. To update the package default for @code{annas-archive-home-url} from the current URL listed in the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article}, run this from the package checkout:
+Anna's Archive frequently changes its domain name. The package resolves the current URL from Wikipedia automatically and caches it for the current Emacs session. If URL resolution fails, check whether Wikipedia is reachable and whether the article still lists the current URL in the infobox.
 
-@example
-emacs -Q --batch -L . -l annas-archive.el \
-  --eval '(annas-archive-update-home-url-default)'
-@end example
-
-The command rewrites the default string in @code{annas-archive.el}. It does not save anything to your personal Custom file.
+If you need a temporary manual URL, set @code{annas-archive-home-url-override}. The old @code{annas-archive-home-url} option is obsolete and no longer controls URL resolution.
 
 @node No results found
 @section No results found

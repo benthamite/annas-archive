@@ -106,6 +106,17 @@ If you use ~use-package~, add one of the following snippets to your init file:
 :CUSTOM_ID: h:user-options
 :END:
 
+** Domain resolution
+:PROPERTIES:
+:CUSTOM_ID: h:domain-resolution
+:END:
+
+#+vindex: annas-archive-home-url-override
+
+The package resolves the current Anna's Archive URL from the [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Wikipedia article]] on first use and caches it for the rest of the Emacs session. Normally you do not need to configure the home URL.
+
+The user option ~annas-archive-home-url-override~ can be set to a URL string when you need to bypass Wikipedia temporarily, for example during a Wikipedia outage or while testing a specific mirror. The default value is ~nil~.
+
 ** Download options
 :PROPERTIES:
 :CUSTOM_ID: h:download-options
@@ -285,14 +296,9 @@ The function ~annas-archive-select-and-open-url~ is an ~eww-after-render-hook~ c
 :CUSTOM_ID: h:domain-changes
 :END:
 
-Anna's Archive frequently changes its domain name. To update the package default for ~annas-archive-home-url~ from the current URL listed in the [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Wikipedia article]], run this from the package checkout:
+Anna's Archive frequently changes its domain name. The package resolves the current URL from Wikipedia automatically and caches it for the current Emacs session. If URL resolution fails, check whether Wikipedia is reachable and whether the article still lists the current URL in the infobox.
 
-#+begin_src shell
-emacs -Q --batch -L . -l annas-archive.el \
-  --eval '(annas-archive-update-home-url-default)'
-#+end_src
-
-The command rewrites the default string in ~annas-archive.el~. It does not save anything to your personal Custom file.
+If you need a temporary manual URL, set ~annas-archive-home-url-override~. The old ~annas-archive-home-url~ option is obsolete and no longer controls URL resolution.
 
 ** No results found
 :PROPERTIES:
