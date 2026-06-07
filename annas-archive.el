@@ -37,11 +37,10 @@
 ;;;;; Anna’s Archive
 
 (defcustom annas-archive-home-url
-  "https://annas-archive.gl/"
+  "https://annas-archive.pk/"
   "URL to Anna’s Archive.
-This address changes regularly; to find the most recent URL, go to
-<https://en.wikipedia.org/wiki/Anna%%27s_Archive> and get the link under
-`External links’."
+This address changes regularly. Maintainers can update the package default with
+`annas-archive-update-home-url-default'."
   :type 'string
   :group 'annas-archive)
 
@@ -54,6 +53,14 @@ in sync if the domain changes."
 (defconst annas-archive-fast-download-api-path
   "dyn/api/fast_download.json"
   "Path to the fast download JSON API endpoint.")
+
+(defconst annas-archive--wikipedia-api-url
+  "https://en.wikipedia.org/w/api.php?action=query&prop=revisions&titles=Anna%27s_Archive&rvprop=content&rvslots=main&format=json&formatversion=2"
+  "MediaWiki API URL for the Anna's Archive article wikitext.")
+
+(defconst annas-archive--loaded-source-file
+  (or load-file-name buffer-file-name)
+  "Source file from which annas-archive was loaded.")
 
 (defconst annas-archive-supported-file-types
   '("pdf" "epub" "fb2" "mobi" "cbr" "djvu" "cbz" "txt" "azw3")
@@ -236,6 +243,94 @@ If STRING is a DOI, return the SciDB URL. Otherwise, return the search URL."
     (if (annas-archive--doi-p s)
 	(concat annas-archive-home-url "scidb/" s)
       (concat annas-archive-home-url "search?q=" (url-hexify-string s)))))
+
+(defun annas-archive-update-home-url-default (&optional file)
+  "Update `annas-archive-home-url' default in FILE from Wikipedia.
+FILE defaults to the source file from which this package was loaded."
+  (interactive)
+  (let* ((url (annas-archive--wikipedia-home-url))
+	 (target (or file (annas-archive--source-file)))
+	 (changed (annas-archive--update-home-url-default-in-file target url)))
+    (message "%s annas-archive-home-url default: %s"
+	     (if changed "Updated" "Unchanged")
+	     url)
+    url))
+
+(defun annas-archive--wikipedia-home-url ()
+  "Return the current Anna's Archive home URL from Wikipedia."
+  (annas-archive--wikipedia-home-url-from-wikitext
+   (annas-archive--wikipedia-wikitext)))
+
+(defun annas-archive--source-file ()
+  "Return the package source file to rewrite."
+  (unless annas-archive--loaded-source-file
+    (user-error "Could not determine annas-archive source file"))
+  (if (string-suffix-p ".elc" annas-archive--loaded-source-file)
+      (concat (file-name-sans-extension annas-archive--loaded-source-file) ".el")
+    annas-archive--loaded-source-file))
+
+(defun annas-archive--update-home-url-default-in-file (file url)
+  "Update `annas-archive-home-url' default in FILE to URL.
+Return non-nil if FILE changed."
+  (let ((url (annas-archive--normalize-home-url url)))
+    (with-temp-buffer
+      (insert-file-contents file)
+      (goto-char (point-min))
+      (unless (re-search-forward "(defcustom[ \t\n]+annas-archive-home-url[ \t\n]+\"\\([^\"]+\\)\"" nil t)
+	(user-error "Could not find annas-archive-home-url default in %s" file))
+      (if (equal (match-string 1) url)
+	  nil
+	(replace-match url t t nil 1)
+	(write-region (point-min) (point-max) file nil 'silent)
+	t))))
+
+(defun annas-archive--wikipedia-home-url-from-wikitext (wikitext)
+  "Return the first Anna's Archive infobox URL in WIKITEXT."
+  (let ((case-fold-search nil))
+    (or (and (string-match "|[ \t]*url[ \t]*=" wikitext)
+	     (string-match "{{URL[[:space:]\n]*|[[:space:]\n]*\\(https://annas-archive\\.[^][|{}\n[:space:]]+/?\\)"
+			   wikitext (match-end 0))
+	     (annas-archive--normalize-home-url (match-string 1 wikitext)))
+	(user-error "Could not find Anna's Archive URL in Wikipedia article"))))
+
+(defun annas-archive--normalize-home-url (url)
+  "Return normalized Anna's Archive home URL from URL."
+  (unless (and (stringp url)
+	       (string-match-p "\\`https://annas-archive\\.[[:alnum:]-]+/?\\'" url))
+    (user-error "Invalid Anna's Archive URL: %S" url))
+  (if (string-suffix-p "/" url)
+      url
+    (concat url "/")))
+
+(defun annas-archive--wikipedia-wikitext-from-json (json)
+  "Return Anna's Archive article wikitext from MediaWiki JSON."
+  (let* ((query (alist-get 'query json))
+	 (pages (alist-get 'pages query))
+	 (page (car pages))
+	 (revisions (alist-get 'revisions page))
+	 (revision (car revisions))
+	 (slots (alist-get 'slots revision))
+	 (main (alist-get 'main slots))
+	 (content (alist-get 'content main)))
+    (if (stringp content)
+	content
+      (user-error "Could not find Wikipedia article wikitext in response"))))
+
+(defun annas-archive--wikipedia-wikitext ()
+  "Fetch and return the latest Anna's Archive Wikipedia wikitext."
+  (let ((buffer (url-retrieve-synchronously annas-archive--wikipedia-api-url t nil 30)))
+    (unless buffer
+      (user-error "Could not fetch Anna's Archive Wikipedia article"))
+    (unwind-protect
+	(with-current-buffer buffer
+	  (goto-char (point-min))
+	  (unless (re-search-forward "\n\n" nil t)
+	    (user-error "Could not parse Wikipedia response headers"))
+	  (let ((json-object-type 'alist)
+		(json-array-type 'list)
+		(json-key-type 'symbol))
+	    (annas-archive--wikipedia-wikitext-from-json (json-read))))
+      (kill-buffer buffer))))
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.

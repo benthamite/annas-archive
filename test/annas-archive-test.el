@@ -25,6 +25,71 @@ Point starts at `point-min'."
   `(let ((annas-archive-home-url ,url))
      ,@body))
 
+;;;; Wikipedia URL updater
+
+(ert-deftest annas-archive-test-wikipedia-extracts-first-infobox-url ()
+  "The first Anna's Archive infobox URL should be selected."
+  (let ((wikitext "{{Infobox website
+| name = Anna's Archive
+| url = {{plainlist |
+* {{URL | https://annas-archive.pk/}}
+* {{URL | https://annas-archive.gd/}}
+}}
+}}"))
+    (should (equal (annas-archive--wikipedia-home-url-from-wikitext wikitext)
+		   "https://annas-archive.pk/"))))
+
+(ert-deftest annas-archive-test-wikipedia-normalizes-trailing-slash ()
+  "The extracted URL should include a trailing slash."
+  (should (equal (annas-archive--normalize-home-url
+		  "https://annas-archive.pk")
+		 "https://annas-archive.pk/")))
+
+(ert-deftest annas-archive-test-wikipedia-rejects-non-archive-url ()
+  "Only Anna's Archive HTTPS URLs should be accepted."
+  (should-error (annas-archive--normalize-home-url "https://example.com/")
+		:type 'user-error))
+
+(ert-deftest annas-archive-test-wikipedia-wikitext-from-json ()
+  "Wikipedia JSON should yield the main revision wikitext."
+  (let* ((json-object-type 'alist)
+	 (json-array-type 'list)
+	 (json-key-type 'symbol)
+	 (json (json-read-from-string
+		"{\"query\":{\"pages\":[{\"revisions\":[{\"slots\":{\"main\":{\"content\":\"WIKI\"}}}]}]}}")))
+    (should (equal (annas-archive--wikipedia-wikitext-from-json json)
+		   "WIKI"))))
+
+(ert-deftest annas-archive-test-update-home-url-default-in-file ()
+  "The package source default should be rewritten to the new URL."
+  (let ((file (make-temp-file "annas-archive-test-" nil ".el")))
+    (unwind-protect
+	(progn
+	  (with-temp-file file
+	    (insert "(defcustom annas-archive-home-url\n")
+	    (insert "  \"https://annas-archive.gl/\"\n")
+	    (insert "  \"URL to Anna's Archive.\")\n"))
+	  (should (annas-archive--update-home-url-default-in-file
+		   file "https://annas-archive.pk/"))
+	  (should (equal (with-temp-buffer
+			   (insert-file-contents file)
+			   (buffer-string))
+			 "(defcustom annas-archive-home-url\n  \"https://annas-archive.pk/\"\n  \"URL to Anna's Archive.\")\n")))
+      (delete-file file))))
+
+(ert-deftest annas-archive-test-update-home-url-default-in-file-no-change ()
+  "Rewriting the package source to the same URL should report no change."
+  (let ((file (make-temp-file "annas-archive-test-" nil ".el")))
+    (unwind-protect
+	(progn
+	  (with-temp-file file
+	    (insert "(defcustom annas-archive-home-url\n")
+	    (insert "  \"https://annas-archive.pk/\"\n")
+	    (insert "  \"URL to Anna's Archive.\")\n"))
+	  (should-not (annas-archive--update-home-url-default-in-file
+		       file "https://annas-archive.pk/")))
+      (delete-file file))))
+
 ;;;; DOI validation
 
 (ert-deftest annas-archive-test-doi-p-valid ()

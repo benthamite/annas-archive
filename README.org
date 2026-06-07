@@ -285,13 +285,14 @@ The function ~annas-archive-select-and-open-url~ is an ~eww-after-render-hook~ c
 :CUSTOM_ID: h:domain-changes
 :END:
 
-Anna's Archive frequently changes its domain name. If the package stops working, check the [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Wikipedia article]] for the current URL and update ~annas-archive-home-url~ accordingly:
+Anna's Archive frequently changes its domain name. To update the package default for ~annas-archive-home-url~ from the current URL listed in the [[https://en.wikipedia.org/wiki/Anna%27s_Archive][Wikipedia article]], run this from the package checkout:
 
-#+begin_src emacs-lisp
-(setopt annas-archive-home-url "https://NEW-DOMAIN/")  ;; note the trailing slash
+#+begin_src shell
+emacs -Q --batch -L . -l annas-archive.el \
+  --eval '(annas-archive-update-home-url-default)'
 #+end_src
 
-Note the trailing slash, which is required.
+The command rewrites the default string in ~annas-archive.el~. It does not save anything to your personal Custom file.
 
 ** No results found
 :PROPERTIES:

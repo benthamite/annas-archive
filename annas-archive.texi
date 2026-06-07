@@ -377,13 +377,14 @@ The function @code{annas-archive-select-and-open-url} is an @code{eww-after-rend
 @node Anna's Archive domain changes
 @section Anna's Archive domain changes
 
-Anna's Archive frequently changes its domain name. If the package stops working, check the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article} for the current URL and update @code{annas-archive-home-url} accordingly:
+Anna's Archive frequently changes its domain name. To update the package default for @code{annas-archive-home-url} from the current URL listed in the @uref{https://en.wikipedia.org/wiki/Anna%27s_Archive, Wikipedia article}, run this from the package checkout:
 
-@lisp
-(setopt annas-archive-home-url "https://NEW-DOMAIN/")  ;; note the trailing slash
-@end lisp
+@example
+emacs -Q --batch -L . -l annas-archive.el \
+  --eval '(annas-archive-update-home-url-default)'
+@end example
 
-Note the trailing slash, which is required.
+The command rewrites the default string in @code{annas-archive.el}. It does not save anything to your personal Custom file.
 
 @node No results found
 @section No results found
