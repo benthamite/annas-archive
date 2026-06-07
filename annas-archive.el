@@ -551,26 +551,35 @@ fast download API or handle the failure."
 If called interactively, or INTERACTIVE is non-nil, display a message indicating
 where the file will be downloaded. Otherwise, kill the eww buffer."
   (interactive "p")
-  (annas-archive-ensure-download-page)
-  (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
-  (save-window-excursion
-    (let ((buffer (current-buffer))
-	  (page-url (plist-get eww-data :url)))
-      (annas-archive--attempt-download page-url)
+  (if (not (annas-archive--download-page-p))
       (if interactive
-	  (message "File will be downloaded to `%s’" annas-archive-downloads-dir)
-	(kill-buffer buffer)))))
+	  (annas-archive-ensure-download-page)
+	(message "Waiting for Anna's Archive download page"))
+    (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
+    (save-window-excursion
+      (let ((buffer (current-buffer))
+	    (page-url (plist-get eww-data :url)))
+	(annas-archive--attempt-download page-url)
+	(if interactive
+	    (message "File will be downloaded to `%s’" annas-archive-downloads-dir)
+	  (kill-buffer buffer))))))
 
 
 ;;;###autoload
 (defun annas-archive-ensure-download-page ()
   "Ensure that the current `eww' buffer is a download page from Anna’s Archive."
-  (if (derived-mode-p 'eww-mode)
-      (if-let ((url (plist-get eww-data :url)))
-	  (unless (string-match-p (annas-archive--download-url-pattern) url)
-	    (user-error "Not on a download page"))
-	(user-error "No URL found"))
-    (user-error "Not in an `eww' buffer")))
+  (unless (derived-mode-p 'eww-mode)
+    (user-error "Not in an `eww' buffer"))
+  (if-let ((url (plist-get eww-data :url)))
+      (unless (annas-archive--download-page-p)
+	(user-error "Not on a download page"))
+    (user-error "No URL found")))
+
+(defun annas-archive--download-page-p ()
+  "Return non-nil when the current buffer is an Anna's Archive download page."
+  (and (derived-mode-p 'eww-mode)
+       (when-let ((url (plist-get eww-data :url)))
+	 (string-match-p (annas-archive--download-url-pattern) url))))
 
 (defun annas-archive--use-fast-download-api-p ()
   "Return non-nil when the fast download API can be used."

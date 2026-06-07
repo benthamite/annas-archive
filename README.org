@@ -230,7 +230,7 @@ The command ~annas-archive-download-file~ downloads the file from the Anna's Arc
 
 The command first verifies that the current buffer is an =eww= buffer displaying a valid Anna's Archive download page (an MD5 or SciDB URL). If ~annas-archive-secret-key~ is set, it uses the fast download API to retrieve the file programmatically ([[#h:download-options][Download options]]). Otherwise, it falls back according to ~annas-archive-when-download-fails~ ([[#h:download-failure-handling][Download failure handling]]).
 
-When called interactively, it displays a message indicating the download directory. When called non-interactively (e.g. from a hook), it silently kills the =eww= buffer after initiating the download.
+When called interactively, it displays a message indicating the download directory. When called non-interactively (e.g. from a hook), it waits through intermediate =eww= renders until the buffer reaches a valid MD5 or SciDB download page, then silently kills the =eww= buffer after initiating the download.
 
 The command ~annas-archive-ensure-download-page~ is a guard that verifies the current buffer is an =eww= buffer showing a valid Anna's Archive item page. It signals a ~user-error~ if the buffer is not in =eww-mode=, has no URL, or the URL does not match the expected pattern. This command is called internally by ~annas-archive-download-file~ but is also available for use in custom workflows.
 

@@ -8,6 +8,8 @@
 (require 'ert)
 (require 'annas-archive)
 
+(defvar eww-data)
+
 ;;;; Helpers
 
 (defmacro annas-archive-test--with-block (text &rest body)
@@ -715,6 +717,14 @@ Point starts at `point-min'."
   "Should signal error when not in eww-mode."
   (with-temp-buffer
     (should-error (annas-archive-ensure-download-page) :type 'user-error)))
+
+(ert-deftest annas-archive-test-download-file-waits-for-intermediate-page ()
+  "A noninteractive download hook should wait on intermediate eww pages."
+  (let ((eww-after-render-hook '(annas-archive-download-file))
+	(eww-data '(:url "https://example.com/")))
+    (cl-letf (((symbol-function 'derived-mode-p) (lambda (&rest _) t)))
+      (annas-archive-download-file)
+      (should (memq #'annas-archive-download-file eww-after-render-hook)))))
 
 ;;;; Regexp sanity checks
 

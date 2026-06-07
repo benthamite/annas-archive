@@ -322,7 +322,7 @@ The command @code{annas-archive-download-file} downloads the file from the Anna'
 
 The command first verifies that the current buffer is an @samp{eww} buffer displaying a valid Anna's Archive download page (an MD5 or SciDB URL). If @code{annas-archive-secret-key} is set, it uses the fast download API to retrieve the file programmatically (@ref{Download options}). Otherwise, it falls back according to @code{annas-archive-when-download-fails} (@ref{Download failure handling}).
 
-When called interactively, it displays a message indicating the download directory. When called non-interactively (e.g. from a hook), it silently kills the @samp{eww} buffer after initiating the download.
+When called interactively, it displays a message indicating the download directory. When called non-interactively (e.g. from a hook), it waits through intermediate @samp{eww} renders until the buffer reaches a valid MD5 or SciDB download page, then silently kills the @samp{eww} buffer after initiating the download.
 
 The command @code{annas-archive-ensure-download-page} is a guard that verifies the current buffer is an @samp{eww} buffer showing a valid Anna's Archive item page. It signals a @code{user-error} if the buffer is not in @samp{eww-mode}, has no URL, or the URL does not match the expected pattern. This command is called internally by @code{annas-archive-download-file} but is also available for use in custom workflows.
 
