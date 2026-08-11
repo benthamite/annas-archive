@@ -60,6 +60,12 @@ Computed dynamically from `annas-archive--home-url' so it stays in sync if the
 domain changes."
   (concat (regexp-quote (annas-archive--home-url)) "\\(?:md5\\|scidb\\)/.*"))
 
+(defun annas-archive--search-url-pattern ()
+  "Return a regexp matching Anna's Archive search page URLs.
+Computed dynamically from `annas-archive--home-url' so it stays in sync if the
+domain changes."
+  (concat (regexp-quote (annas-archive--home-url)) "search\\(?:[?/]\\|\\'\\)"))
+
 (defconst annas-archive-fast-download-api-path
   "dyn/api/fast_download.json"
   "Path to the fast download JSON API endpoint.")
@@ -222,9 +228,23 @@ non-interactively, never prompt; signal an error if STRING is nil or empty."
 		     (annas-archive--require-nonempty-string string)))
 	   (url (annas-archive--url-for-query string))
 	   (hook-fn (if (annas-archive--doi-p string)
-			#'annas-archive-download-file
+			#'annas-archive--doi-after-render
 		      #'annas-archive-select-and-open-url)))
       (annas-archive--eww-with-hook url hook-fn))))
+
+(defun annas-archive--doi-after-render ()
+  "Act on the page reached while looking up a DOI in SciDB.
+Anna's Archive redirects the SciDB URL of a DOI it holds no record of to a
+journals search page, so download from a download page, fall back to the search
+selection flow on a search page, and otherwise wait for a later render."
+  (cond ((annas-archive--download-page-p)
+	 (remove-hook 'eww-after-render-hook #'annas-archive--doi-after-render)
+	 (annas-archive-download-file))
+	((annas-archive--search-page-p)
+	 (remove-hook 'eww-after-render-hook #'annas-archive--doi-after-render)
+	 (message "No SciDB record for this DOI. Searching Anna's Archive instead")
+	 (annas-archive--select-results))
+	(t (message "Waiting for Anna's Archive download page"))))
 
 ;;;;; Parsing
 
@@ -514,6 +534,12 @@ spaces."
 (defun annas-archive-select-and-open-url ()
   "Get the download URLs from the Anna’s Archive search results buffer."
   (remove-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
+  (annas-archive--select-results))
+
+(defun annas-archive--select-results ()
+  "Prompt for one result in the current Anna's Archive search results buffer.
+Retry with all supported file types when the included types yield no hits and
+`annas-archive-retry-with-all-file-types' is non-nil."
   (condition-case nil
       (annas-archive-collect-results)
     (user-error
@@ -580,6 +606,12 @@ where the file will be downloaded. Otherwise, kill the eww buffer."
   (and (derived-mode-p 'eww-mode)
        (when-let ((url (plist-get eww-data :url)))
 	 (string-match-p (annas-archive--download-url-pattern) url))))
+
+(defun annas-archive--search-page-p ()
+  "Return non-nil when the current buffer is an Anna's Archive search page."
+  (and (derived-mode-p 'eww-mode)
+       (when-let ((url (plist-get eww-data :url)))
+	 (string-match-p (annas-archive--search-url-pattern) url))))
 
 (defun annas-archive--use-fast-download-api-p ()
   "Return non-nil when the fast download API can be used."

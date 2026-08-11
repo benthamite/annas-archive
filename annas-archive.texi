@@ -115,6 +115,8 @@ The package depends only on libraries bundled with Emacs: @samp{cl-lib}, @samp{j
 
 When the search string is a DOI (e.g. @samp{10.1145/1458082.1458150}), the package bypasses the normal search flow and navigates directly to the SciDB page for that DOI@. From there it extracts the MD5 hash of the associated file and proceeds with the download. This makes it straightforward to fetch papers by DOI@.
 
+Anna's Archive redirects the SciDB URL of a DOI that it holds no record of to a journals search page. When that happens, the package reports that there is no SciDB record for the DOI and falls back to the normal search selection flow, so you can still pick a matching item if one exists.
+
 @node Breaking change (February 2026)
 @section Breaking change (February 2026)
 
@@ -304,7 +306,7 @@ A DOI (e.g. @samp{10.1145/1458082.1458150}) for academic papers.
 
 The command loads the Anna's Archive search results page in @samp{eww} behind the scenes, parses the rendered results to extract titles, file types, sizes, languages, and publication years, and presents them in a formatted @code{completing-read} interface. After you select a result, the package navigates to the item's detail page and initiates the download.
 
-When the search string is a DOI, the command skips the search step and navigates directly to the SciDB page for that DOI, proceeding straight to download (@ref{DOI support}).
+When the search string is a DOI, the command skips the search step and navigates directly to the SciDB page for that DOI, proceeding straight to download. If Anna's Archive has no SciDB record for the DOI and redirects to a journals search page, the command returns to the search selection flow (@ref{DOI support}).
 
 When called non-interactively, the command expects a non-empty string argument and does not prompt. It signals an error if the argument is @code{nil} or empty. This makes it suitable for use in Lisp code:
 

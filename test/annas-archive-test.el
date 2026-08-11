@@ -9,6 +9,7 @@
 (require 'annas-archive)
 
 (defvar eww-data)
+(defvar eww-after-render-hook)
 
 ;;;; Helpers
 
@@ -230,6 +231,28 @@ Point starts at `point-min'."
     (should-not (string-match-p
                  (annas-archive--download-url-pattern)
                  "https://example.com/md5/abc123"))))
+
+;;;; Search URL pattern
+
+(ert-deftest annas-archive-test-search-url-pattern-matches-search ()
+  "Pattern should match search page URLs, including SciDB redirects."
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
+    (should (string-match-p
+             (annas-archive--search-url-pattern)
+             "https://annas-archive.gl/search?q=foobar"))
+    (should (string-match-p
+             (annas-archive--search-url-pattern)
+             "https://annas-archive.gl/search?index=journals&q=\"doi:10.1/x\""))))
+
+(ert-deftest annas-archive-test-search-url-pattern-rejects-download-pages ()
+  "Pattern should NOT match md5 or scidb download page URLs."
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
+    (should-not (string-match-p
+                 (annas-archive--search-url-pattern)
+                 "https://annas-archive.gl/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4"))
+    (should-not (string-match-p
+                 (annas-archive--search-url-pattern)
+                 "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
 
 ;;;; MD5 URL validation
 
@@ -720,11 +743,54 @@ Point starts at `point-min'."
 
 (ert-deftest annas-archive-test-download-file-waits-for-intermediate-page ()
   "A noninteractive download hook should wait on intermediate eww pages."
-  (let ((eww-after-render-hook '(annas-archive-download-file))
-	(eww-data '(:url "https://example.com/")))
-    (cl-letf (((symbol-function 'derived-mode-p) (lambda (&rest _) t)))
-      (annas-archive-download-file)
-      (should (memq #'annas-archive-download-file eww-after-render-hook)))))
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
+    (let ((eww-after-render-hook '(annas-archive-download-file))
+	  (eww-data '(:url "https://example.com/")))
+      (cl-letf (((symbol-function 'derived-mode-p) (lambda (&rest _) t)))
+	(annas-archive-download-file)
+	(should (memq #'annas-archive-download-file eww-after-render-hook))))))
+
+;;;; DOI render dispatch
+
+(defmacro annas-archive-test--with-doi-render (url &rest body)
+  "Run the DOI render hook on a mock eww buffer showing URL, then run BODY.
+BODY can inspect `eww-after-render-hook' and the local variables `downloaded'
+and `selected', which record which branch the hook took."
+  (declare (indent 1))
+  `(annas-archive-test--with-home-url-override "https://annas-archive.gl/"
+     (let ((eww-after-render-hook '(annas-archive--doi-after-render))
+	   (eww-data (list :url ,url))
+	   downloaded selected)
+       (cl-letf (((symbol-function 'derived-mode-p) (lambda (&rest _) t))
+		 ((symbol-function 'annas-archive-download-file)
+		  (lambda (&rest _) (setq downloaded t)))
+		 ((symbol-function 'annas-archive--select-results)
+		  (lambda (&rest _) (setq selected t))))
+	 (annas-archive--doi-after-render)
+	 ,@body))))
+
+(ert-deftest annas-archive-test-doi-render-downloads-on-scidb-page ()
+  "A SciDB download page should trigger the download and unhook the handler."
+  (annas-archive-test--with-doi-render
+      "https://annas-archive.gl/scidb/10.1145/1458082.1458150/"
+    (should downloaded)
+    (should-not selected)
+    (should-not (memq #'annas-archive--doi-after-render eww-after-render-hook))))
+
+(ert-deftest annas-archive-test-doi-render-selects-on-search-page ()
+  "A SciDB redirect to search should fall back to the selection flow."
+  (annas-archive-test--with-doi-render
+      "https://annas-archive.gl/search?index=journals&q=\"doi:10.1/x\""
+    (should selected)
+    (should-not downloaded)
+    (should-not (memq #'annas-archive--doi-after-render eww-after-render-hook))))
+
+(ert-deftest annas-archive-test-doi-render-waits-on-intermediate-page ()
+  "Any other page should leave the handler in place for a later render."
+  (annas-archive-test--with-doi-render "https://example.com/"
+    (should-not downloaded)
+    (should-not selected)
+    (should (memq #'annas-archive--doi-after-render eww-after-render-hook))))
 
 ;;;; Regexp sanity checks
 
