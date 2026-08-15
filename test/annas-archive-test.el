@@ -8,9 +8,6 @@
 (require 'ert)
 (require 'annas-archive)
 
-(defvar eww-data)
-(defvar eww-after-render-hook)
-
 ;;;; Helpers
 
 (defmacro annas-archive-test--with-block (text &rest body)
@@ -178,16 +175,16 @@ Point starts at `point-min'."
       (should (string-match-p "Great" url)))))
 
 (ert-deftest annas-archive-test-url-for-query-doi ()
-  "A DOI should produce a SciDB URL."
+  "A DOI should produce a journals search URL."
   (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should (equal (annas-archive--url-for-query "10.1145/1458082.1458150")
-                   "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
+		   "https://annas-archive.gl/search?index=journals&q=%22doi%3A10.1145%2F1458082.1458150%22"))))
 
 (ert-deftest annas-archive-test-url-for-query-trims-input ()
   "Surrounding whitespace should be trimmed before URL construction."
   (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (should (equal (annas-archive--url-for-query "  10.1145/1458082.1458150  ")
-                   "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
+		   "https://annas-archive.gl/search?index=journals&q=%22doi%3A10.1145%2F1458082.1458150%22"))))
 
 (ert-deftest annas-archive-test-url-for-query-encodes-special-chars ()
   "Special characters in search queries should be URL-encoded."
@@ -201,58 +198,6 @@ Point starts at `point-min'."
   (annas-archive-test--with-home-url-override "https://annas-archive.li/"
     (should (string-prefix-p "https://annas-archive.li/search?q="
                              (annas-archive--url-for-query "test")))))
-
-;;;; Download URL pattern
-
-(ert-deftest annas-archive-test-download-url-pattern-matches-md5 ()
-  "Pattern should match md5 download page URLs."
-  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (should (string-match-p
-             (annas-archive--download-url-pattern)
-             "https://annas-archive.gl/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4"))))
-
-(ert-deftest annas-archive-test-download-url-pattern-matches-scidb ()
-  "Pattern should match scidb download page URLs."
-  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (should (string-match-p
-             (annas-archive--download-url-pattern)
-             "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
-
-(ert-deftest annas-archive-test-download-url-pattern-rejects-search ()
-  "Pattern should NOT match search page URLs."
-  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (should-not (string-match-p
-                 (annas-archive--download-url-pattern)
-                 "https://annas-archive.gl/search?q=foobar"))))
-
-(ert-deftest annas-archive-test-download-url-pattern-rejects-other-domain ()
-  "Pattern should NOT match URLs from different domains."
-  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (should-not (string-match-p
-                 (annas-archive--download-url-pattern)
-                 "https://example.com/md5/abc123"))))
-
-;;;; Search URL pattern
-
-(ert-deftest annas-archive-test-search-url-pattern-matches-search ()
-  "Pattern should match search page URLs, including SciDB redirects."
-  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (should (string-match-p
-             (annas-archive--search-url-pattern)
-             "https://annas-archive.gl/search?q=foobar"))
-    (should (string-match-p
-             (annas-archive--search-url-pattern)
-             "https://annas-archive.gl/search?index=journals&q=\"doi:10.1/x\""))))
-
-(ert-deftest annas-archive-test-search-url-pattern-rejects-download-pages ()
-  "Pattern should NOT match md5 or scidb download page URLs."
-  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (should-not (string-match-p
-                 (annas-archive--search-url-pattern)
-                 "https://annas-archive.gl/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4"))
-    (should-not (string-match-p
-                 (annas-archive--search-url-pattern)
-                 "https://annas-archive.gl/scidb/10.1145/1458082.1458150"))))
 
 ;;;; MD5 URL validation
 
@@ -612,12 +557,12 @@ Point starts at `point-min'."
                       "\\([0-9]+\\)" 1 nil)
                      "456")))))
 
-;;;; Link extraction (eww buffer simulation)
+;;;; Link extraction (SHR buffer simulation)
 
 (ert-deftest annas-archive-test-get-links-extracts-shr-urls ()
   "Should extract links from text with `shr-url' properties."
   (with-temp-buffer
-    ;; Simulate eww-rendered buffer with shr-url properties.
+    ;; Simulate an SHR-rendered buffer with shr-url properties.
     (insert "Click ")
     (let ((start (point)))
       (insert "here")
@@ -720,6 +665,88 @@ Point starts at `point-min'."
       ;; Should not error; display string should exist
       (should (stringp (car (car cands)))))))
 
+;;;; Direct search handling
+
+(defconst annas-archive-test--result-html
+  "<html><body><p><a href='/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4'>*</a></p>
+<p>book.epub</p><p>English · EPUB · 1998 · 1.2 MB</p>
+<p><a href='/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4'>The Book</a></p></body></html>"
+  "Minimal HTML for one parseable Anna's Archive result.")
+
+(ert-deftest annas-archive-test-search-detects-transient-responses ()
+  "Challenges, rate limits, and server failures should be transient."
+  (should (annas-archive--transient-search-response-p
+	   403 "Checking your browser before accessing"))
+  (should (annas-archive--transient-search-response-p 429 ""))
+  (should (annas-archive--transient-search-response-p 503 ""))
+  (should (annas-archive--transient-search-response-p
+	   200 "Our servers are not responding"))
+  (should-not (annas-archive--transient-search-response-p 200 "ok")))
+
+(ert-deftest annas-archive-test-search-valid-html-returns-results ()
+  "A valid HTML response should return its parsed results."
+  (let ((result (car (annas-archive--parse-search-html
+		      annas-archive-test--result-html))))
+    (should (equal (plist-get result :title) "The Book"))
+    (should (equal (plist-get result :type) "epub"))
+    (should (equal (plist-get result :size) "1.2 MB"))
+    (should (equal (plist-get result :year) "1998"))))
+
+(ert-deftest annas-archive-test-search-explicit-empty-returns-nil ()
+  "Only the explicit empty marker should return nil."
+  (should-not
+   (annas-archive--parse-search-html
+    "<html><body>No files found.</body></html>")))
+
+(ert-deftest annas-archive-test-search-malformed-html-signals-error ()
+  "A non-result page without the empty marker should signal an error."
+  (should-error
+   (annas-archive--parse-search-html "<html><body>Unexpected</body></html>")
+   :type 'user-error))
+
+(ert-deftest annas-archive-test-search-retries-transient-failure ()
+  "A transient response should retry and then return valid results."
+  (let ((annas-archive-search-retries 1)
+	(annas-archive-search-retry-delay 0)
+	(calls 0)
+	(session-cookie nil)
+	(expected '((:title "Result"))))
+    (cl-letf (((symbol-function 'annas-archive--fetch-search-results)
+	       (lambda (_url)
+		 (if (= (cl-incf calls) 1)
+		     (progn
+		       (setq session-cookie "guard-session")
+		       (signal 'annas-archive-transient-search-error '("guard")))
+		   (progn
+		     (should (equal session-cookie "guard-session"))
+		     expected)))))
+      (should (equal (annas-archive--search "https://example.com")
+		     expected))
+      (should (= calls 2)))))
+
+(ert-deftest annas-archive-test-search-exhaustion-signals-error ()
+  "A persistent transient response must not become an empty result."
+  (let ((annas-archive-search-retries 0))
+    (cl-letf (((symbol-function 'annas-archive--fetch-search-results)
+	       (lambda (_url)
+		 (signal 'annas-archive-transient-search-error '("guard")))))
+      (should-error (annas-archive--search "https://example.com")
+		    :type 'user-error))))
+
+(ert-deftest annas-archive-test-search-filter-miss-is-not-empty-search ()
+  "A file-type filter miss should not be reported as an empty search."
+  (let ((annas-archive-retry-with-all-file-types nil)
+	message-text)
+    (cl-letf (((symbol-function 'annas-archive--select-result)
+	       (lambda (&rest _)
+		 (signal 'annas-archive-no-matching-results nil)))
+	      ((symbol-function 'message)
+	       (lambda (format-string &rest args)
+		 (setq message-text (apply #'format format-string args)))))
+      (annas-archive--select-results '((:title "Result")))
+      (should-not (string-match-p "No results found" message-text))
+      (should (string-match-p "file types" message-text)))))
+
 ;;;; Download failure handling
 
 (ert-deftest annas-archive-test-handle-download-failure-error ()
@@ -734,63 +761,35 @@ Point starts at `point-min'."
     ;; Should not error
     (annas-archive-handle-download-failure "https://example.com")))
 
-;;;; Ensure download page (guard function)
+;;;; Direct result downloads
 
-(ert-deftest annas-archive-test-ensure-download-page-not-eww ()
-  "Should signal error when not in eww-mode."
-  (with-temp-buffer
-    (should-error (annas-archive-ensure-download-page) :type 'user-error)))
-
-(ert-deftest annas-archive-test-download-file-waits-for-intermediate-page ()
-  "A noninteractive download hook should wait on intermediate eww pages."
+(ert-deftest annas-archive-test-download-result-opens-page-without-key ()
+  "Without an API key, a result should open directly in the browser."
   (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-    (let ((eww-after-render-hook '(annas-archive-download-file))
-	  (eww-data '(:url "https://example.com/")))
-      (cl-letf (((symbol-function 'derived-mode-p) (lambda (&rest _) t)))
-	(annas-archive-download-file)
-	(should (memq #'annas-archive-download-file eww-after-render-hook))))))
+    (let (opened)
+      (cl-letf (((symbol-function 'annas-archive-download-file-externally)
+		 (lambda (url) (setq opened url))))
+	(annas-archive--download-result
+	 "/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4")
+	(should (equal opened
+		       "https://annas-archive.gl/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4"))))))
 
-;;;; DOI render dispatch
-
-(defmacro annas-archive-test--with-doi-render (url &rest body)
-  "Run the DOI render hook on a mock eww buffer showing URL, then run BODY.
-BODY can inspect `eww-after-render-hook' and the local variables `downloaded'
-and `selected', which record which branch the hook took."
-  (declare (indent 1))
-  `(annas-archive-test--with-home-url-override "https://annas-archive.gl/"
-     (let ((eww-after-render-hook '(annas-archive--doi-after-render))
-	   (eww-data (list :url ,url))
-	   downloaded selected)
-       (cl-letf (((symbol-function 'derived-mode-p) (lambda (&rest _) t))
-		 ((symbol-function 'annas-archive-download-file)
-		  (lambda (&rest _) (setq downloaded t)))
-		 ((symbol-function 'annas-archive--select-results)
-		  (lambda (&rest _) (setq selected t))))
-	 (annas-archive--doi-after-render)
-	 ,@body))))
-
-(ert-deftest annas-archive-test-doi-render-downloads-on-scidb-page ()
-  "A SciDB download page should trigger the download and unhook the handler."
-  (annas-archive-test--with-doi-render
-      "https://annas-archive.gl/scidb/10.1145/1458082.1458150/"
-    (should downloaded)
-    (should-not selected)
-    (should-not (memq #'annas-archive--doi-after-render eww-after-render-hook))))
-
-(ert-deftest annas-archive-test-doi-render-selects-on-search-page ()
-  "A SciDB redirect to search should fall back to the selection flow."
-  (annas-archive-test--with-doi-render
-      "https://annas-archive.gl/search?index=journals&q=\"doi:10.1/x\""
-    (should selected)
-    (should-not downloaded)
-    (should-not (memq #'annas-archive--doi-after-render eww-after-render-hook))))
-
-(ert-deftest annas-archive-test-doi-render-waits-on-intermediate-page ()
-  "Any other page should leave the handler in place for a later render."
-  (annas-archive-test--with-doi-render "https://example.com/"
-    (should-not downloaded)
-    (should-not selected)
-    (should (memq #'annas-archive--doi-after-render eww-after-render-hook))))
+(ert-deftest annas-archive-test-download-result-uses-api-with-key ()
+  "With an API key, a result should use its MD5 with the download API."
+  (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
+    (let ((annas-archive-secret-key "key")
+	  requested-md5 downloaded)
+      (cl-letf (((symbol-function 'annas-archive--fast-download-api)
+		 (lambda (md5)
+		   (setq requested-md5 md5)
+		   "https://files.example/book.epub"))
+		((symbol-function 'annas-archive-download-file-internally)
+		 (lambda (url) (setq downloaded url))))
+	(annas-archive--download-result
+	 "/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4")
+	(should (equal requested-md5
+		       "d6e1dc51a7b0dcdc3e2ef164a0f1e6b4"))
+	(should (equal downloaded "https://files.example/book.epub"))))))
 
 ;;;; Regexp sanity checks
 

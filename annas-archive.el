@@ -29,6 +29,7 @@
 
 (require 'cl-lib)
 (require 'json)
+(require 'shr)
 (require 'url-parse)
 (require 'url-util)
 
@@ -54,18 +55,6 @@ Emacs session."
 (defvar annas-archive--home-url-cache nil
   "Cached Anna's Archive home URL for the current Emacs session.")
 
-(defun annas-archive--download-url-pattern ()
-  "Return a regexp matching Anna's Archive download page URLs.
-Computed dynamically from `annas-archive--home-url' so it stays in sync if the
-domain changes."
-  (concat (regexp-quote (annas-archive--home-url)) "\\(?:md5\\|scidb\\)/.*"))
-
-(defun annas-archive--search-url-pattern ()
-  "Return a regexp matching Anna's Archive search page URLs.
-Computed dynamically from `annas-archive--home-url' so it stays in sync if the
-domain changes."
-  (concat (regexp-quote (annas-archive--home-url)) "search\\(?:[?/]\\|\\'\\)"))
-
 (defconst annas-archive-fast-download-api-path
   "dyn/api/fast_download.json"
   "Path to the fast download JSON API endpoint.")
@@ -85,11 +74,11 @@ domain changes."
   "Regexp matching a human-readable size like \"1.2 MB\" in a block.")
 
 (defconst annas-archive--re-language
-  "^[ \t]*\\([^·\n]+\\)[ \t]*·[ \t]*[A-Z]\\{3,6\\}[ \t]*·"
+  "^[[:space:]]*\\([^·\n]+\\)[[:space:]]*·[[:space:]]*[A-Z]\\{3,6\\}[[:space:]]*·"
   "Regexp matching the language token line in a block.")
 
 (defconst annas-archive--re-year
-  "·[ \t]*\\([12][0-9]\\{3\\}\\)[ \t]*·"
+  "·[[:space:]]*\\([12][0-9]\\{3\\}\\)[[:space:]]*·"
   "Regexp matching the publication year token in a block.")
 
 (defconst annas-archive--re-ext-from-filename
@@ -97,7 +86,7 @@ domain changes."
   "Regexp matching a filename-ending extension like \".epub\".")
 
 (defconst annas-archive--re-ext-from-token
-  "·[ \t]*\\([A-Z]\\{3,6\\}\\)[ \t]*·"
+  "·[[:space:]]*\\([A-Z]\\{3,6\\}\\)[[:space:]]*·"
   "Regexp matching an uppercase extension token like \"· EPUB ·\".")
 
 ;;;;; DOIs
@@ -112,6 +101,13 @@ Case-insensitive: matches both uppercase and lowercase DOI suffixes.")
 (defgroup annas-archive ()
   "Rudimentary integration for Anna’s Archive."
   :group 'emacs)
+
+(define-error 'annas-archive-no-matching-results
+  "No Anna's Archive results match the configured file types"
+  'user-error)
+
+(define-error 'annas-archive-transient-search-error
+  "Anna's Archive returned a transient search error")
 
 ;;;;; Main options
 
@@ -166,6 +162,16 @@ By default, all supported file extensions are included."
   :type 'boolean
   :group 'annas-archive)
 
+(defcustom annas-archive-search-retries 10
+  "Maximum retries after a transient Anna's Archive search response."
+  :type 'natnum
+  :group 'annas-archive)
+
+(defcustom annas-archive-search-retry-delay 1
+  "Seconds to wait before retrying a transient search response."
+  :type 'natnum
+  :group 'annas-archive)
+
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
 Each function is called with the URL as its first argument and, when the file
@@ -202,16 +208,6 @@ was downloaded programmatically, the destination path as its second argument."
 
 ;;;; Functions
 
-(defun annas-archive--eww-with-hook (url hook-fn)
-  "Browse URL in eww with HOOK-FN on `eww-after-render-hook’.
-If `eww’ signals an error, remove HOOK-FN and re-signal."
-  (add-hook 'eww-after-render-hook hook-fn)
-  (condition-case err
-      (eww url)
-    (error
-     (remove-hook 'eww-after-render-hook hook-fn)
-     (signal (car err) (cdr err)))))
-
 ;;;###autoload
 (defun annas-archive-download (&optional string)
   "Search Anna’s Archive for STRING and download the selected item.
@@ -221,30 +217,14 @@ papers) a DOI.
 When called interactively, always prompt for STRING. When called
 non-interactively, never prompt; signal an error if STRING is nil or empty."
   (interactive)
-  (save-window-excursion
-    (let* ((prompt "Search string: ")
-	   (string (if (called-interactively-p 'interactive)
-		       (read-string prompt)
-		     (annas-archive--require-nonempty-string string)))
-	   (url (annas-archive--url-for-query string))
-	   (hook-fn (if (annas-archive--doi-p string)
-			#'annas-archive--doi-after-render
-		      #'annas-archive-select-and-open-url)))
-      (annas-archive--eww-with-hook url hook-fn))))
-
-(defun annas-archive--doi-after-render ()
-  "Act on the page reached while looking up a DOI in SciDB.
-Anna's Archive redirects the SciDB URL of a DOI it holds no record of to a
-journals search page, so download from a download page, fall back to the search
-selection flow on a search page, and otherwise wait for a later render."
-  (cond ((annas-archive--download-page-p)
-	 (remove-hook 'eww-after-render-hook #'annas-archive--doi-after-render)
-	 (annas-archive-download-file))
-	((annas-archive--search-page-p)
-	 (remove-hook 'eww-after-render-hook #'annas-archive--doi-after-render)
-	 (message "No SciDB record for this DOI. Searching Anna's Archive instead")
-	 (annas-archive--select-results))
-	(t (message "Waiting for Anna's Archive download page"))))
+  (let* ((prompt "Search string: ")
+	 (string (if (called-interactively-p 'interactive)
+		     (read-string prompt)
+		   (annas-archive--require-nonempty-string string)))
+	 (results (annas-archive--search (annas-archive--url-for-query string))))
+    (if results
+	(annas-archive--select-results results)
+      (message "No results found"))))
 
 ;;;;; Parsing
 
@@ -264,11 +244,12 @@ STRING is the user input."
 
 (defun annas-archive--url-for-query (string)
   "Return the Anna’s Archive URL to use for STRING.
-If STRING is a DOI, return the SciDB URL. Otherwise, return the search URL."
+DOIs use the journals index. Other strings use the default search index."
   (let ((s (string-trim (or string "")))
 	(home-url (annas-archive--home-url)))
     (if (annas-archive--doi-p s)
-	(concat home-url "scidb/" s)
+	(concat home-url "search?index=journals&q="
+		(url-hexify-string (format "\"doi:%s\"" s)))
       (concat home-url "search?q=" (url-hexify-string s)))))
 
 (defun annas-archive--home-url ()
@@ -332,6 +313,83 @@ If STRING is a DOI, return the SciDB URL. Otherwise, return the search URL."
 	    (annas-archive--wikipedia-wikitext-from-json (json-read))))
       (kill-buffer buffer))))
 
+(defvar url-http-response-status)
+(defvar url-request-extra-headers)
+
+(defun annas-archive--search (url)
+  "Return validated search results fetched directly from URL.
+Retry transient network, DDoS-Guard, rate-limit, and server responses while
+preserving the HTTP cookie session between attempts."
+  (let ((attempt 0))
+    (catch 'results
+      (while t
+	(condition-case err
+	    (throw 'results (annas-archive--fetch-search-results url))
+	  (annas-archive-transient-search-error
+	   (if (>= attempt annas-archive-search-retries)
+	       (user-error
+		"Anna's Archive search failed after %d attempts: %s"
+		(1+ attempt) (error-message-string err))
+	     (cl-incf attempt)
+	     (message "Anna's Archive search failed; retrying (%d/%d)"
+		      attempt annas-archive-search-retries)
+	     (sleep-for annas-archive-search-retry-delay))))))))
+
+(defun annas-archive--fetch-search-results (url)
+  "Fetch URL and return its parsed Anna's Archive search results.
+Return nil only when the response contains the explicit empty-results marker."
+  (let* ((url-request-extra-headers
+	  '(("Accept" . "text/html") ("Accept-Language" . "en")))
+	 (buffer (url-retrieve-synchronously url t nil 30)))
+    (unless buffer
+      (signal 'annas-archive-transient-search-error
+	      '("No HTTP response")))
+    (unwind-protect
+	(with-current-buffer buffer
+	  (let ((status url-http-response-status)
+		(body (annas-archive--http-response-body)))
+	    (cond
+	     ((annas-archive--transient-search-response-p status body)
+	      (signal 'annas-archive-transient-search-error
+		      (list (format "HTTP %s or challenge page"
+				    (or status "unknown")))))
+	     ((not (and (integerp status) (<= 200 status) (< status 300)))
+	      (user-error "Anna's Archive search returned HTTP %s"
+			  (or status "unknown")))
+	     (t (annas-archive--parse-search-html body)))))
+      (kill-buffer buffer))))
+
+(defun annas-archive--http-response-body ()
+  "Return the HTTP response body in the current URL buffer."
+  (save-excursion
+    (goto-char (point-min))
+    (unless (re-search-forward "\r?\n\r?\n" nil t)
+      (signal 'annas-archive-transient-search-error
+	      '("Malformed HTTP response")))
+    (buffer-substring-no-properties (point) (point-max))))
+
+(defun annas-archive--transient-search-response-p (status body)
+  "Return non-nil when STATUS and BODY describe a transient response."
+  (or (memq status '(403 408 425 429))
+      (and (integerp status) (>= status 500))
+      (string-match-p
+       "DDoS-Guard\\|Checking your browser before accessing\\|Our servers are not responding"
+       body)))
+
+(defun annas-archive--parse-search-html (html)
+  "Return search results parsed from validated Anna's Archive HTML.
+Return nil only if HTML renders with Anna's explicit empty-results marker."
+  (with-temp-buffer
+    (insert html)
+    (let ((shr-use-fonts nil)
+	  (shr-use-colors nil)
+	  (shr-width 200))
+      (shr-render-region (point-min) (point-max)))
+    (cond
+     ((annas-archive--empty-search-page-p) nil)
+     ((annas-archive-parse-results))
+     (t (user-error "Anna's Archive search response could not be parsed")))))
+
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
 Return a list of plists with bibliographic details for each hit.
@@ -345,7 +403,7 @@ TYPE is a lowercase extension like \"pdf\" or \"epub\"."
     (annas-archive--combine-url-info star-urls url->titles)))
 
 (defun annas-archive-get-links ()
-  "Get an alist of link titles and URLs for all links in the current `eww' buffer."
+  "Return link titles and URLs from the current SHR-rendered buffer."
   (save-excursion
     (goto-char (point-min))
     (let (beg end candidates)
@@ -399,7 +457,11 @@ titles."
               (size  (plist-get info :size))
               (lang  (plist-get info :language))
               (year  (plist-get info :year)))
-         (list :title (or best "*") :url url :type type :size size :language lang :year year)))
+         (list :title (if best
+			  (replace-regexp-in-string
+			   "[[:space:]]+" " " (string-trim best))
+			"*")
+	       :url url :type type :size size :language lang :year year)))
      star-urls infos)))
 
 (defun annas-archive--md5-url-p (url)
@@ -441,7 +503,10 @@ GROUP is the capturing group number to return. If TRIM is non-nil, trim spaces."
       (goto-char (point-min))
       (when (re-search-forward regexp nil t)
 	(let ((s (match-string group)))
-	  (if trim (string-trim s) s))))))
+	  (if trim
+	      (replace-regexp-in-string
+	       "[[:space:]]+" " " (string-trim s))
+	    s))))))
 
 (defun annas-archive--size-from-block (beg end)
   "Return human-readable size string found between BEG and END, like “1.2 MB”."
@@ -481,21 +546,26 @@ Tries a filename line ending in .EXT first, then the “· EXT ·” token line.
 ;;;;; Collection
 
 (defun annas-archive-collect-results (&optional types)
-  "Prompt for one result from the current Archive results buffer and visit it.
+  "Prompt for one result from the current Archive results buffer and download it.
 Only include links whose file types match TYPES (list of lowercase extensions).
 If TYPES is nil, use `annas-archive-included-file-types'."
   (interactive)
-  (let* ((wanted (mapcar #'downcase (or types annas-archive-included-file-types)))
-	 (results (annas-archive-parse-results))
+  (annas-archive--select-result (annas-archive-parse-results) types))
+
+(defun annas-archive--select-result (results &optional types)
+  "Prompt for one item from RESULTS and download it.
+Only include result TYPES, or `annas-archive-included-file-types' if nil."
+  (let* ((wanted (mapcar #'downcase
+			 (or types annas-archive-included-file-types)))
 	 (filtered (cl-remove-if-not
 		    (lambda (r) (member (plist-get r :type) wanted))
 		    results))
 	 (cands (annas-archive--format-candidates filtered)))
     (if (null cands)
-	(user-error "No matching results for types: %s" wanted)
+	(signal 'annas-archive-no-matching-results (list wanted))
       (let* ((choice (completing-read "Select a link: " (mapcar #'car cands) nil t))
 	     (url    (cdr (assoc choice cands))))
-	(annas-archive--eww-with-hook url #'annas-archive-download-file)))))
+	(annas-archive--download-result url)))))
 
 (defun annas-archive--format-candidates (results)
   "Return formatted candidates from RESULTS for completion.
@@ -531,87 +601,45 @@ spaces."
 
 ;;;;; Selection
 
-(defun annas-archive-select-and-open-url ()
-  "Get the download URLs from the Anna’s Archive search results buffer."
-  (remove-hook 'eww-after-render-hook #'annas-archive-select-and-open-url)
-  (annas-archive--select-results))
+(defun annas-archive--empty-search-page-p ()
+  "Return non-nil if the current page has Anna's Archive's empty marker."
+  (save-excursion
+    (goto-char (point-min))
+    (re-search-forward "No files found\\." nil t)))
 
-(defun annas-archive--select-results ()
-  "Prompt for one result in the current Anna's Archive search results buffer.
+(defun annas-archive--select-results (results)
+  "Prompt for one result from validated Anna's Archive RESULTS.
 Retry with all supported file types when the included types yield no hits and
 `annas-archive-retry-with-all-file-types' is non-nil."
   (condition-case nil
-      (annas-archive-collect-results)
-    (user-error
+      (annas-archive--select-result results)
+    (annas-archive-no-matching-results
      (if (and annas-archive-retry-with-all-file-types
 	      (not (equal (sort (copy-sequence annas-archive-included-file-types) #'string<)
 			  (sort (copy-sequence annas-archive-supported-file-types) #'string<)))
-	      (y-or-n-p "No results found. Try again with all file types? "))
+	      (y-or-n-p "No results match configured file types. Try all supported types? "))
 	 (condition-case nil
-	     (annas-archive-collect-results annas-archive-supported-file-types)
-	   (user-error (message "No results found.")))
-       (message "No results found.")))))
+	     (annas-archive--select-result
+	      results annas-archive-supported-file-types)
+	   (annas-archive-no-matching-results
+	    (message "Search results contain no supported file types")))
+       (message "No results match configured file types")))))
 
 ;;;;; Downloading
 
-(defvar eww-data)
-(defvar url-request-extra-headers)
 (autoload 'browse-url-default-browser "browse-url")
-(defun annas-archive--attempt-download (page-url)
-  "Attempt to download the file for PAGE-URL.
-Check for server errors, extract the MD5 hash, and either use the
-fast download API or handle the failure."
-  (goto-char (point-min))
-  (if (re-search-forward "Our servers are not responding" nil t)
-      (message "Servers are not responding. Please try again later.")
-    (let* ((md5 (or (annas-archive--md5-from-url page-url)
-		    (annas-archive--md5-from-page)))
-	   (api-download-url (when (and md5 (annas-archive--use-fast-download-api-p))
-			       (annas-archive--fast-download-api md5))))
-      (if api-download-url
-	  (annas-archive-download-file-internally api-download-url)
-	(annas-archive-handle-download-failure page-url)))))
 
-(defun annas-archive-download-file (&optional interactive)
-  "Download the file in the current eww buffer page.
-If called interactively, or INTERACTIVE is non-nil, display a message indicating
-where the file will be downloaded. Otherwise, kill the eww buffer."
-  (interactive "p")
-  (if (not (annas-archive--download-page-p))
-      (if interactive
-	  (annas-archive-ensure-download-page)
-	(message "Waiting for Anna's Archive download page"))
-    (remove-hook 'eww-after-render-hook #'annas-archive-download-file)
-    (save-window-excursion
-      (let ((buffer (current-buffer))
-	    (page-url (plist-get eww-data :url)))
-	(annas-archive--attempt-download page-url)
-	(if interactive
-	    (message "File will be downloaded to `%s’" annas-archive-downloads-dir)
-	  (kill-buffer buffer))))))
-
-
-;;;###autoload
-(defun annas-archive-ensure-download-page ()
-  "Ensure that the current `eww' buffer is a download page from Anna’s Archive."
-  (unless (derived-mode-p 'eww-mode)
-    (user-error "Not in an `eww' buffer"))
-  (if-let ((url (plist-get eww-data :url)))
-      (unless (annas-archive--download-page-p)
-	(user-error "Not on a download page"))
-    (user-error "No URL found")))
-
-(defun annas-archive--download-page-p ()
-  "Return non-nil when the current buffer is an Anna's Archive download page."
-  (and (derived-mode-p 'eww-mode)
-       (when-let ((url (plist-get eww-data :url)))
-	 (string-match-p (annas-archive--download-url-pattern) url))))
-
-(defun annas-archive--search-page-p ()
-  "Return non-nil when the current buffer is an Anna's Archive search page."
-  (and (derived-mode-p 'eww-mode)
-       (when-let ((url (plist-get eww-data :url)))
-	 (string-match-p (annas-archive--search-url-pattern) url))))
+(defun annas-archive--download-result (page-url)
+  "Download the item at PAGE-URL without visiting its page in Emacs."
+  (let ((page-url (url-expand-file-name page-url
+					(annas-archive--home-url))))
+    (if (annas-archive--use-fast-download-api-p)
+	(let* ((md5 (annas-archive--md5-from-url page-url))
+	       (download-url (and md5 (annas-archive--fast-download-api md5))))
+	  (if download-url
+	      (annas-archive-download-file-internally download-url)
+	    (annas-archive-handle-download-failure page-url)))
+      (annas-archive-download-file-externally page-url))))
 
 (defun annas-archive--use-fast-download-api-p ()
   "Return non-nil when the fast download API can be used."
@@ -625,14 +653,6 @@ URL is a string like \"https://annas-archive.gl/md5/d6e1dc51...\"."
     (let ((case-fold-search nil))
       (when (string-match "/md5/\\([0-9a-f]+\\)" url)
         (match-string 1 url)))))
-
-(defun annas-archive--md5-from-page ()
-  "Extract the first MD5 hash from links in the current eww buffer.
-This is used as a fallback when the MD5 cannot be extracted from the page URL,
-such as on SciDB pages for DOI lookups."
-  (cl-loop for (_title . url) in (annas-archive-get-links)
-           when (annas-archive--md5-url-p url)
-           return (annas-archive--md5-from-url url)))
 
 (defun annas-archive--fast-download-error-message (err)
   "Return a user-friendly message for fast download API error ERR."
