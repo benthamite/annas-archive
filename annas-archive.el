@@ -28,8 +28,10 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'dom)
 (require 'json)
 (require 'shr)
+(require 'subr-x)
 (require 'url-parse)
 (require 'url-util)
 
@@ -171,6 +173,42 @@ By default, all supported file extensions are included."
   "Seconds to wait before retrying a transient search response."
   :type 'natnum
   :group 'annas-archive)
+
+(defcustom annas-archive-search-backend 'auto
+  "Backend used to fetch Anna's Archive search pages.
+`auto' uses the Chrome bridge when its socket exists and direct HTTP otherwise.
+`chrome' uses the Chrome to Emacs extension in an existing browser window.  It
+creates an inactive tab, lets Chrome execute JavaScript challenges, reads the
+resulting DOM, and closes the tab.  `direct' uses Emacs's URL library and cannot
+run JavaScript challenges."
+  :type '(choice
+	  (const :tag "Chrome bridge when available; direct HTTP otherwise" auto)
+	  (const :tag "Chrome to Emacs bridge" chrome)
+	  (const :tag "Direct HTTP" direct))
+  :group 'annas-archive)
+
+(defcustom annas-archive-search-mirrors
+  '("annas-archive.pk" "annas-archive.gd" "annas-archive.gl")
+  "Anna's Archive hosts tried after transient search failures.
+The order matters.  The host in the original search URL is appended when it is
+not already present."
+  :type '(repeat string)
+  :group 'annas-archive)
+
+(defcustom annas-archive-chrome-bridge-socket nil
+  "Unix-domain socket for the Chrome to Emacs bridge.
+When nil, use the socket created by the installed Chrome to Emacs native host."
+  :type '(choice (const :tag "Use the standard socket" nil) file)
+  :group 'annas-archive)
+
+(defcustom annas-archive-chrome-timeout 45
+  "Maximum seconds to wait for a Chrome bridge search.
+Values below 1 or above 45 are clamped to that range."
+  :type 'natnum
+  :group 'annas-archive)
+
+(defvar annas-archive--last-chrome-telemetry nil
+  "Telemetry from the most recent Chrome bridge search response.")
 
 (defcustom annas-archive-post-download-hook nil
   "Hook run after downloading a file from Anna’s Archive.
@@ -317,30 +355,66 @@ DOIs use the journals index. Other strings use the default search index."
 (defvar url-request-extra-headers)
 
 (defun annas-archive--search (url)
-  "Return validated search results fetched directly from URL.
-Retry transient network, DDoS-Guard, rate-limit, and server responses while
-preserving the HTTP cookie session between attempts."
-  (let ((attempt 0))
+  "Return validated search results fetched from URL.
+Retry transient network, DDoS-Guard, rate-limit, and server responses."
+  (let ((attempt 0)
+	(urls (annas-archive--search-urls url)))
     (catch 'results
       (while t
-	(condition-case err
-	    (throw 'results (annas-archive--fetch-search-results url))
-	  (annas-archive-transient-search-error
-	   (if (>= attempt annas-archive-search-retries)
-	       (user-error
-		"Anna's Archive search failed after %d attempts: %s"
-		(1+ attempt) (error-message-string err))
-	     (cl-incf attempt)
-	     (message "Anna's Archive search failed; retrying (%d/%d)"
-		      attempt annas-archive-search-retries)
-	     (sleep-for annas-archive-search-retry-delay))))))))
+	(let ((current-url (nth (mod attempt (length urls)) urls)))
+	  (condition-case err
+	      (throw 'results
+		     (annas-archive--fetch-search-results current-url))
+	    (annas-archive-transient-search-error
+	     (if (>= attempt annas-archive-search-retries)
+		 (user-error
+		  "Anna's Archive search failed after %d attempts: %s"
+		  (1+ attempt) (error-message-string err))
+	       (cl-incf attempt)
+	       (message "Anna's Archive search failed on %s; retrying (%d/%d)"
+			(url-host (url-generic-parse-url current-url))
+			attempt annas-archive-search-retries)
+	       (sleep-for annas-archive-search-retry-delay)))))))))
+
+(defun annas-archive--search-urls (url)
+  "Return mirror search URLs derived from URL."
+  (if (not (string-match
+	    "\\`https://\\(annas-archive\\.[^/]+\\)\\(/search\\?.*\\)\\'"
+	    url))
+      (list url)
+    (let ((original-host (match-string 1 url))
+	  (suffix (match-string 2 url)))
+      (mapcar (lambda (host) (concat "https://" host suffix))
+	      (delete-dups
+	       (append annas-archive-search-mirrors (list original-host)))))))
 
 (defun annas-archive--fetch-search-results (url)
   "Fetch URL and return its parsed Anna's Archive search results.
 Return nil only when the response contains the explicit empty-results marker."
+  (pcase (annas-archive--effective-search-backend)
+    ('chrome (annas-archive--fetch-search-results-with-chrome url))
+    ('direct (annas-archive--fetch-search-results-directly url))))
+
+(defun annas-archive--effective-search-backend ()
+  "Return the concrete backend selected by `annas-archive-search-backend'."
+  (pcase annas-archive-search-backend
+    ('auto (if (file-exists-p (annas-archive--chrome-bridge-socket))
+	       'chrome
+	     'direct))
+    ((or 'chrome 'direct) annas-archive-search-backend)
+    (_ (user-error "Invalid Anna's Archive search backend: %S"
+		   annas-archive-search-backend))))
+
+(defun annas-archive--fetch-search-results-directly (url)
+  "Fetch URL with Emacs's URL library and return parsed search results."
   (let* ((url-request-extra-headers
 	  '(("Accept" . "text/html") ("Accept-Language" . "en")))
-	 (buffer (url-retrieve-synchronously url t nil 30)))
+	 (buffer
+	  (condition-case err
+	      (url-retrieve-synchronously url t nil 30)
+	    (error
+	     (signal 'annas-archive-transient-search-error
+		     (list (error-message-string err)))))))
     (unless buffer
       (signal 'annas-archive-transient-search-error
 	      '("No HTTP response")))
@@ -348,16 +422,120 @@ Return nil only when the response contains the explicit empty-results marker."
 	(with-current-buffer buffer
 	  (let ((status url-http-response-status)
 		(body (annas-archive--http-response-body)))
-	    (cond
-	     ((annas-archive--transient-search-response-p status body)
-	      (signal 'annas-archive-transient-search-error
-		      (list (format "HTTP %s or challenge page"
-				    (or status "unknown")))))
-	     ((not (and (integerp status) (<= 200 status) (< status 300)))
-	      (user-error "Anna's Archive search returned HTTP %s"
-			  (or status "unknown")))
-	     (t (annas-archive--parse-search-html body)))))
+	    (annas-archive--parse-search-response status body)))
       (kill-buffer buffer))))
+
+(defun annas-archive--fetch-search-results-with-chrome (url)
+  "Fetch URL through the Chrome bridge and return parsed search results."
+  (let* ((response (annas-archive--chrome-bridge-request url))
+	 (outcome (alist-get 'outcome response))
+	 (message-text (or (alist-get 'message response)
+			   "Chrome bridge returned an unknown error")))
+    (setq annas-archive--last-chrome-telemetry
+	  (alist-get 'telemetry response))
+    (pcase outcome
+      ("success"
+	(let ((html (alist-get 'html response)))
+	  (unless (stringp html)
+	    (signal 'annas-archive-transient-search-error
+		    '("Chrome bridge response has no HTML")))
+	  (let ((classification (annas-archive--classify-search-html html)))
+	    (if (eq (car classification) 'empty)
+		(signal 'annas-archive-transient-search-error
+			'("Chrome bridge reported results for an empty page"))
+	      (annas-archive--parse-search-response 200 html)))))
+      ("empty"
+	(let ((html (alist-get 'html response)))
+	  (unless (stringp html)
+	    (signal 'annas-archive-transient-search-error
+		    '("Chrome bridge response has no HTML")))
+	  (annas-archive--parse-search-response 200 html)))
+      ((or "transient" "malformed")
+	(signal 'annas-archive-transient-search-error (list message-text)))
+      (_ (signal 'annas-archive-transient-search-error
+		 (list (format "Anna's Archive Chrome search failed: %s"
+			       message-text)))))))
+
+(defun annas-archive--chrome-bridge-request (url)
+  "Ask the Chrome bridge to fetch URL and return its response."
+  (let* ((socket (annas-archive--chrome-bridge-socket)))
+    (unless (file-exists-p socket)
+      (user-error "Chrome to Emacs bridge is not running: %s" socket))
+    (let* ((buffer (generate-new-buffer " *annas-archive-chrome*"))
+	   (request-id (format "%x-%x" (truncate (float-time)) (random)))
+	   (timeout (max 1 (min annas-archive-chrome-timeout 45)))
+	   (deadline (+ (float-time) timeout 5))
+	   process)
+      (unwind-protect
+	  (progn
+	    (condition-case err
+		(setq process
+		      (make-network-process
+		       :name "annas-archive-chrome"
+		       :buffer buffer
+		       :family 'local
+		       :service socket
+		       :coding 'utf-8-unix
+		       :noquery t))
+	      (file-error
+	       (signal 'annas-archive-transient-search-error
+		       (list (error-message-string err)))))
+	    (process-send-string
+	     process
+	     (concat
+	      (json-encode
+	       `((action . "fetch")
+		 (id . ,request-id)
+		 (url . ,url)
+		 (timeout . ,(* 1000 timeout))))
+	      "\n"))
+	    (while (and (process-live-p process)
+			(< (float-time) deadline))
+	      (accept-process-output process 0.1))
+	    (when (process-live-p process)
+	      (delete-process process)
+	      (signal 'annas-archive-transient-search-error
+		      '("Chrome bridge timed out")))
+	    (with-current-buffer buffer
+	      (goto-char (point-min))
+	      (when (= (point-min) (point-max))
+		(signal 'annas-archive-transient-search-error
+			'("Chrome bridge returned no response")))
+	      (let ((json-object-type 'alist)
+		    (json-array-type 'list)
+		    (json-key-type 'symbol))
+		(let ((response (json-read)))
+		  (unless (or (null (alist-get 'id response))
+			      (equal (alist-get 'id response) request-id))
+		    (user-error "Chrome bridge returned a mismatched response"))
+		  response))))
+	(when (process-live-p process)
+	  (delete-process process))
+	(kill-buffer buffer)))))
+
+(defun annas-archive--chrome-bridge-socket ()
+  "Return the Chrome to Emacs bridge socket path."
+  (or annas-archive-chrome-bridge-socket
+      (expand-file-name
+       (format "chrome-to-eww-%d/bridge.sock" (user-uid))
+       temporary-file-directory)))
+
+(defun annas-archive--parse-search-response (status body)
+  "Parse a search response with HTTP STATUS and BODY.
+Parseable results take precedence over stale challenge markers."
+  (let ((classification (annas-archive--classify-search-html body)))
+    (cond
+     ((eq (car classification) 'results) (cdr classification))
+     ((annas-archive--transient-search-response-p status body)
+      (signal 'annas-archive-transient-search-error
+	      (list (format "HTTP %s or challenge page"
+			    (or status "unknown")))))
+     ((not (and (integerp status) (<= 200 status) (< status 300)))
+      (user-error "Anna's Archive search returned HTTP %s"
+		  (or status "unknown")))
+     ((eq (car classification) 'empty) nil)
+     (t (signal 'annas-archive-transient-search-error
+		'("Anna's Archive search response could not be parsed"))))))
 
 (defun annas-archive--http-response-body ()
   "Return the HTTP response body in the current URL buffer."
@@ -373,22 +551,76 @@ Return nil only when the response contains the explicit empty-results marker."
   (or (memq status '(403 408 425 429))
       (and (integerp status) (>= status 500))
       (string-match-p
-       "DDoS-Guard\\|Checking your browser before accessing\\|Our servers are not responding"
+       (concat "<title>[[:space:]\n]*DDoS-Guard[[:space:]\n]*</title>"
+	       "\\|Checking your browser before accessing"
+	       "\\|could not verify your browser automatically"
+	       "\\|id=[\"']js-challenge[\"']"
+	       "\\|Our servers are not responding")
        body)))
 
 (defun annas-archive--parse-search-html (html)
   "Return search results parsed from validated Anna's Archive HTML.
 Return nil only if HTML renders with Anna's explicit empty-results marker."
-  (with-temp-buffer
-    (insert html)
-    (let ((shr-use-fonts nil)
-	  (shr-use-colors nil)
-	  (shr-width 200))
-      (shr-render-region (point-min) (point-max)))
-    (cond
-     ((annas-archive--empty-search-page-p) nil)
-     ((annas-archive-parse-results))
-     (t (user-error "Anna's Archive search response could not be parsed")))))
+  (pcase (annas-archive--classify-search-html html)
+    (`(results . ,results) results)
+    (`(empty) nil)
+    (_ (user-error "Anna's Archive search response could not be parsed"))))
+
+(defun annas-archive--classify-search-html (html)
+  "Classify HTML as results, explicit empty, or malformed."
+  (let ((empty-page (annas-archive--valid-empty-search-html-p html)))
+    (with-temp-buffer
+      (insert html)
+      (let ((shr-use-fonts nil)
+	    (shr-use-colors nil)
+	    (shr-width 200))
+	(shr-render-region (point-min) (point-max)))
+      (let ((results (annas-archive-parse-results)))
+	(cond
+	 (results (cons 'results results))
+	 (empty-page '(empty))
+	 (t '(malformed)))))))
+
+(defun annas-archive--dom-class-p (node class)
+  "Return non-nil when NODE has CLASS as a class token."
+  (member class (split-string (or (dom-attr node 'class) "") nil t)))
+
+(defun annas-archive--valid-empty-search-html-p (html)
+  "Return non-nil when HTML is a structurally valid empty search page."
+  (condition-case nil
+      (with-temp-buffer
+	(insert html)
+	(let* ((dom (libxml-parse-html-region (point-min) (point-max)))
+	       (forms (dom-by-tag dom 'form))
+	       (inputs (dom-by-tag dom 'input))
+	       (spans (dom-by-tag dom 'span))
+	       (search-form
+		(cl-find-if
+		 (lambda (node)
+		   (and (annas-archive--dom-class-p node "js-search-form")
+			(string= (downcase (or (dom-attr node 'method) "get")) "get")
+			(string-match-p "\\(?:^\\|/\\)search\\(?:[?#].*\\)?\\'"
+					(or (dom-attr node 'action) ""))))
+		 forms))
+	       (query-input
+		(cl-find-if
+		 (lambda (node)
+		   (and (annas-archive--dom-class-p node "js-search-main-input")
+			(string= (or (dom-attr node 'name) "") "q")
+			(string= (downcase (or (dom-attr node 'type) "")) "search")))
+		 inputs))
+	       (empty-marker
+		(cl-find-if
+		 (lambda (node)
+		   (and (annas-archive--dom-class-p node "font-bold")
+			(string= (string-trim (dom-texts node)) "No files found.")))
+		 spans))
+	       (page-text (dom-texts dom " ")))
+	  (and search-form query-input empty-marker
+	       (string-match-p
+		"Try fewer or different search terms and filters\\."
+		page-text))))
+    (error nil)))
 
 (defun annas-archive-parse-results ()
   "Parse the current Anna’s Archive results buffer.
@@ -600,12 +832,6 @@ spaces."
       s)))
 
 ;;;;; Selection
-
-(defun annas-archive--empty-search-page-p ()
-  "Return non-nil if the current page has Anna's Archive's empty marker."
-  (save-excursion
-    (goto-char (point-min))
-    (re-search-forward "No files found\\." nil t)))
 
 (defun annas-archive--select-results (results)
   "Prompt for one result from validated Anna's Archive RESULTS.
