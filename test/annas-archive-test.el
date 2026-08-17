@@ -26,6 +26,14 @@ Point starts at `point-min'."
 	 (annas-archive--home-url-cache nil))
      ,@body))
 
+(defun annas-archive-test--http-buffer (status body)
+  "Return a URL response buffer with STATUS and BODY."
+  (let ((buffer (generate-new-buffer " *annas-archive-test-http*")))
+    (with-current-buffer buffer
+      (setq-local url-http-response-status status)
+      (insert (format "HTTP/1.1 %d Test\r\n\r\n%s" status body)))
+    buffer))
+
 ;;;; Wikipedia URL resolution
 
 (ert-deftest annas-archive-test-wikipedia-extracts-first-infobox-url ()
@@ -773,12 +781,99 @@ Try fewer or different search terms and filters.</div>
 
 (ert-deftest annas-archive-test-direct-transport-error-is-transient ()
   "Direct network failures should permit trying another mirror."
-  (cl-letf (((symbol-function 'url-retrieve-synchronously)
-	     (lambda (&rest _)
-	       (signal 'file-error '("TLS connection failed")))))
-    (should-error
-     (annas-archive--fetch-search-results "https://example.com")
-     :type 'annas-archive-transient-search-error)))
+  (let ((annas-archive-secret-key nil))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+	       (lambda (&rest _)
+		 (signal 'file-error '("TLS connection failed")))))
+      (should-error
+       (annas-archive--fetch-search-results "https://example.com")
+       :type 'annas-archive-transient-search-error))))
+
+(ert-deftest annas-archive-test-search-login-uses-secret-key ()
+  "Member searches should create an authenticated in-memory session."
+  (let ((annas-archive-secret-key "secret key")
+	request)
+    (cl-letf (((symbol-function 'annas-archive--retrieve-search-url)
+	       (lambda (url)
+		 (setq request
+		       (list url url-request-method url-request-data
+			     url-request-extra-headers))
+		 (annas-archive-test--http-buffer
+		  200 "<script>window.globalUpdateAaLoggedIn(1);</script>"))))
+      (annas-archive--login-for-search
+       "https://annas-archive.gl/search?q=book")
+      (should
+       (equal request
+	      '("https://annas-archive.gl/account/"
+		"POST" "key=secret%20key"
+		(("Accept" . "text/html")
+		 ("Accept-Language" . "en")
+		 ("Content-Type" . "application/x-www-form-urlencoded"))))))))
+
+(ert-deftest annas-archive-test-search-login-rejects-invalid-key ()
+  "An account page that remains logged out should reject the secret key."
+  (let ((annas-archive-secret-key "invalid"))
+    (cl-letf (((symbol-function 'annas-archive--retrieve-search-url)
+	       (lambda (_url)
+		 (annas-archive-test--http-buffer
+		  200 "<html><form action=\"/account/\"></form></html>"))))
+      (should-error
+       (annas-archive--login-for-search
+	"https://annas-archive.gl/search?q=book")
+       :type 'user-error))))
+
+(ert-deftest annas-archive-test-search-login-rejects-untrusted-host ()
+  "The secret key must never be sent to a non-Anna host."
+  (let ((annas-archive-secret-key "secret"))
+    (cl-letf (((symbol-function 'annas-archive--retrieve-search-url)
+	       (lambda (&rest _)
+		 (ert-fail "Network request must not be made"))))
+      (should-error
+       (annas-archive--login-for-search "https://example.com/search?q=book")
+       :type 'user-error))))
+
+(ert-deftest annas-archive-test-member-search-logs-in-before-fetch ()
+  "A configured secret key should cause login before result retrieval."
+  (let ((annas-archive-secret-key "key")
+	events)
+    (cl-letf (((symbol-function 'annas-archive--login-for-search)
+	       (lambda (url) (push (list 'login url) events)))
+	      ((symbol-function 'annas-archive--retrieve-search-url)
+	       (lambda (url)
+		 (push (list 'fetch url) events)
+		 (annas-archive-test--http-buffer
+		  200 annas-archive-test--result-html))))
+      (should
+       (annas-archive--fetch-search-results
+	"https://annas-archive.gl/search?q=book"))
+      (should
+       (equal (nreverse events)
+	      '((login "https://annas-archive.gl/search?q=book")
+		(fetch "https://annas-archive.gl/search?q=book")))))))
+
+(ert-deftest annas-archive-test-member-search-keeps-cookie-in-memory ()
+  "A member search should not alter the persistent URL cookie state."
+  (let ((annas-archive-secret-key "key")
+	(url-cookie-file "persistent-cookie-file")
+	(url-cookie-storage 'persistent-cookies)
+	(url-cookie-secure-storage 'persistent-secure-cookies)
+	seen)
+    (cl-letf (((symbol-function 'annas-archive--login-for-search)
+	       (lambda (_url)
+		 (setq seen
+		       (list url-cookie-file url-cookie-storage
+			     url-cookie-secure-storage))))
+	      ((symbol-function 'annas-archive--retrieve-search-url)
+	       (lambda (_url)
+		 (annas-archive-test--http-buffer
+		  200 annas-archive-test--result-html))))
+      (annas-archive--fetch-search-results
+	"https://annas-archive.gl/search?q=book")
+      (should (equal seen '(nil nil nil)))
+      (should (equal url-cookie-file "persistent-cookie-file"))
+      (should (equal url-cookie-storage 'persistent-cookies))
+      (should (equal url-cookie-secure-storage
+		     'persistent-secure-cookies)))))
 
 (ert-deftest annas-archive-test-search-retries-transient-failure ()
   "A transient response should retry and then return valid results."

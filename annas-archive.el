@@ -32,6 +32,7 @@
 (require 'json)
 (require 'shr)
 (require 'subr-x)
+(require 'url-cookie)
 (require 'url-parse)
 (require 'url-util)
 
@@ -114,12 +115,19 @@ Case-insensitive: matches both uppercase and lowercase DOI suffixes.")
 ;;;;; Main options
 
 (defcustom annas-archive-secret-key nil
-  "Secret key for the Anna's Archive fast download API.
-When set, enables programmatic downloads directly within Emacs via the fast
-download API. To find your key, log into Anna's Archive with a paid membership
-and visit the account page."
+  "Secret key for Anna's Archive member searches and fast downloads.
+When set, the package creates an in-memory Anna's Archive account session before
+each search.  This lets eligible members bypass the site's browser check.  The
+key also enables programmatic downloads through the fast download API.  To find
+your key, log into Anna's Archive with a paid membership and visit the account
+page."
   :type '(choice (const :tag "Not set" nil) string)
   :group 'annas-archive)
+
+(defun annas-archive--secret-key-configured-p ()
+  "Return non-nil when an Anna's Archive secret key is configured."
+  (and (stringp annas-archive-secret-key)
+       (not (string-empty-p annas-archive-secret-key))))
 
 (make-obsolete-variable
  'annas-archive-use-eww
@@ -324,7 +332,12 @@ DOIs use the journals index. Other strings use the default search index."
       (kill-buffer buffer))))
 
 (defvar url-http-response-status)
+(defvar url-cookie-file)
+(defvar url-cookie-secure-storage)
+(defvar url-cookie-storage)
+(defvar url-request-data)
 (defvar url-request-extra-headers)
+(defvar url-request-method)
 
 (defun annas-archive--search (url)
   "Return validated search results fetched directly from URL.
@@ -363,23 +376,77 @@ responses across the configured mirrors."
 (defun annas-archive--fetch-search-results (url)
   "Fetch URL and return its parsed Anna's Archive search results.
 Return nil only when the response contains the explicit empty-results marker."
-  (let* ((url-request-extra-headers
-	  '(("Accept" . "text/html") ("Accept-Language" . "en")))
-	 (buffer
-	  (condition-case err
-	      (url-retrieve-synchronously url t nil 30)
-	    (error
-	     (signal 'annas-archive-transient-search-error
-		     (list (error-message-string err)))))))
+  ;; Keep the account token in memory and scoped to this request.  In
+  ;; particular, do not write it to `url-cookie-file'.
+  (let ((url-cookie-file nil)
+	(url-cookie-secure-storage nil)
+	(url-cookie-storage nil))
+    (when (annas-archive--secret-key-configured-p)
+      (annas-archive--login-for-search url))
+    (let* ((url-request-extra-headers
+	    '(("Accept" . "text/html") ("Accept-Language" . "en")))
+	   (buffer (annas-archive--retrieve-search-url url)))
+      (unless buffer
+        (signal 'annas-archive-transient-search-error
+	        '("No HTTP response")))
+      (unwind-protect
+	  (with-current-buffer buffer
+	    (let ((status url-http-response-status)
+		  (body (annas-archive--http-response-body)))
+	      (annas-archive--parse-search-response status body)))
+	(kill-buffer buffer)))))
+
+(defun annas-archive--login-for-search (search-url)
+  "Create an in-memory member session for SEARCH-URL's host.
+Signal a user error when the configured secret key cannot establish a session."
+  (let* ((host (url-host (url-generic-parse-url search-url)))
+	 (login-url
+	  (progn
+	    (unless (and host
+			 (string-match-p
+			  "\\`annas-archive\\.[[:alnum:]-]+\\'" host))
+	      (user-error
+	       "Refusing to send `annas-archive-secret-key' to %s"
+	       (or host "an invalid host")))
+	    (format "https://%s/account/" host)))
+	 (url-request-method "POST")
+	 (url-request-extra-headers
+	  '(("Accept" . "text/html")
+	    ("Accept-Language" . "en")
+	    ("Content-Type" . "application/x-www-form-urlencoded")))
+	 (url-request-data
+	  (concat "key=" (url-hexify-string annas-archive-secret-key)))
+	 (buffer (annas-archive--retrieve-search-url login-url)))
     (unless buffer
       (signal 'annas-archive-transient-search-error
-	      '("No HTTP response")))
+              '("No HTTP response while signing in")))
     (unwind-protect
 	(with-current-buffer buffer
 	  (let ((status url-http-response-status)
 		(body (annas-archive--http-response-body)))
-	    (annas-archive--parse-search-response status body)))
+	    (cond
+	     ((annas-archive--transient-search-response-p status body)
+	      (signal 'annas-archive-transient-search-error
+		      (list (format "HTTP %s or challenge page while signing in"
+				    (or status "unknown")))))
+	     ((not (and (integerp status) (<= 200 status) (< status 300)))
+	      (signal 'annas-archive-transient-search-error
+		      (list (format "Anna's Archive sign-in returned HTTP %s"
+				    (or status "unknown")))))
+	     ((not (string-match-p
+		    "window\\.globalUpdateAaLoggedIn(1)" body))
+	      (user-error
+	       "Anna's Archive did not establish a member session; check `annas-archive-secret-key' and membership")))))
       (kill-buffer buffer))))
+
+(defun annas-archive--retrieve-search-url (url)
+  "Retrieve URL synchronously for an Anna's Archive search.
+Normalize transport failures so the caller can try another mirror."
+  (condition-case err
+      (url-retrieve-synchronously url t nil 30)
+    (error
+     (signal 'annas-archive-transient-search-error
+	     (list (error-message-string err))))))
 
 (defun annas-archive--parse-search-response (status body)
   "Parse a search response with HTTP STATUS and BODY.
@@ -730,8 +797,7 @@ Retry with all supported file types when the included types yield no hits and
 
 (defun annas-archive--use-fast-download-api-p ()
   "Return non-nil when the fast download API can be used."
-  (and (stringp annas-archive-secret-key)
-       (not (string-empty-p annas-archive-secret-key))))
+  (annas-archive--secret-key-configured-p))
 
 (defun annas-archive--md5-from-url (url)
   "Extract the MD5 hash from an Anna's Archive URL.

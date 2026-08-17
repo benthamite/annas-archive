@@ -4,16 +4,16 @@
 
 ![demo](demo.gif)
 
-Anna's Archive does not provide a search-results API. The package fetches its HTML search route directly, validates the response, renders it with `shr`, and extracts the metadata needed by `completing-read`. It does not open an `eww` buffer or install browser callbacks. DOI queries use the journals index.
+Anna's Archive does not provide a search-results API. The package fetches its HTML search route directly, validates the response, renders it with `shr`, and extracts the metadata needed by `completing-read`. When `annas-archive-secret-key` is set, it first creates an authenticated in-memory session so that eligible members bypass the site's browser check. It does not open an `eww` buffer or use an external browser for search. DOI queries use the journals index.
 
 Anna's Archive sometimes returns a DDoS-Guard challenge instead of search results. `annas-archive` detects challenges, network failures, server errors, and malformed pages, then tries the configured mirrors. It reports “No results found” only for a structurally verified Anna's Archive empty-search page; a bare phrase or failed request can never become an empty result.
 
 Two download mechanisms are available:
 
-- **Programmatic download** via the Anna's Archive fast download API. When `annas-archive-secret-key` is set, the package calls the JSON API, retrieves the file asynchronously within Emacs, and saves it to `annas-archive-downloads-dir`.
+- **Programmatic download** via the Anna's Archive fast download API. The same `annas-archive-secret-key` used for authenticated search enables this mode. The package calls the JSON API, retrieves the file asynchronously within Emacs, and saves it to `annas-archive-downloads-dir`.
 - **External browser fallback.** When the API key is not set, the package opens the selected item page in the system's default browser. It can do the same when a programmatic download fails.
 
-The package depends only on libraries bundled with Emacs (`cl-lib`, `dom`, `json`, `shr`, `subr-x`, `url-parse`, and `url-util`).
+The package depends only on libraries bundled with Emacs (`cl-lib`, `dom`, `json`, `shr`, `subr-x`, `url-cookie`, `url-parse`, and `url-util`).
 
 ## Installation
 
@@ -44,7 +44,8 @@ The package depends only on libraries bundled with Emacs (`cl-lib`, `dom`, `json
 (use-package annas-archive
   :ensure (annas-archive :host github :repo "benthamite/annas-archive")
   :config
-  ;; Optional: enable programmatic downloads (requires a paid membership)
+  ;; Enable authenticated search and programmatic downloads.
+  ;; This requires an eligible membership.
   (setopt annas-archive-secret-key "YOUR_SECRET_KEY"))
 ```
 
