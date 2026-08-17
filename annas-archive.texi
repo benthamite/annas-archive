@@ -234,6 +234,7 @@ A programmatic download can fail for several reasons: the fast download API may 
 @vindex annas-archive-retry-with-all-file-types
 @vindex annas-archive-search-retries
 @vindex annas-archive-search-retry-delay
+@vindex annas-archive-search-mirrors
 
 The user option @code{annas-archive-included-file-types} specifies which file extensions to include when displaying search results. The value is a list of lowercase extension strings. The default includes all types supported by the package: @samp{pdf}, @samp{epub}, @samp{fb2}, @samp{mobi}, @samp{cbr}, @samp{djvu}, @samp{cbz}, @samp{txt}, and @samp{azw3}.
 
@@ -245,9 +246,9 @@ If you only want PDF and EPUB results, for example:
 
 The user option @code{annas-archive-retry-with-all-file-types} controls whether the package automatically retries a search with all supported file types when the filtered search returns no results. When set to @code{t} (the default), the package prompts with a @samp{y-or-n} question before retrying. Set it to @code{nil} to disable this behavior.
 
-Anna's Archive sometimes returns a DDoS-Guard challenge or a temporary server-error page in place of the search results. The package detects these responses and retries instead of reporting that the search has no results. @code{annas-archive-search-retries} sets the maximum number of retries (10 by default), while @code{annas-archive-search-retry-delay} sets the delay between attempts in seconds (1 by default). Each retry is reported in the echo area.
+Anna's Archive sometimes returns a DDoS-Guard challenge or a temporary server-error page in place of the search results. The package detects these responses and tries the hosts in @code{annas-archive-search-mirrors} instead of reporting that the search has no results. @code{annas-archive-search-retries} sets the maximum number of retries (10 by default), while @code{annas-archive-search-retry-delay} sets the delay between attempts in seconds (1 by default). Each retry is reported in the echo area.
 
-The package reports ``No results found'' only when the page contains Anna's Archive's explicit empty-search marker. If the page has neither that marker nor parseable results, it reports that the response could not be parsed. A file-type filter that excludes every returned item also has its own message.
+The package reports ``No results found'' only when a complete Anna's Archive search page contains the site's structured empty-result element and explanatory text. A bare phrase, challenge, server error, malformed page, or transport error is retried and cannot become an empty result. A file-type filter that excludes every returned item also has its own message.
 
 @node Column widths
 @section Column widths
@@ -383,14 +384,14 @@ If you need a temporary manual URL, set @code{annas-archive-home-url-override}. 
 @node DDoS-Guard challenges
 @section DDoS-Guard challenges
 
-Anna's Archive's DDoS protection sometimes sends a JavaScript challenge instead of search results. The package detects the challenge before parsing, waits briefly, and retries with the same HTTP cookie session. Preserving the paired DDoS-Guard cookies lets a later request use any admission state that Anna's Archive granted during an earlier attempt. The package reports each retry in the echo area. If all attempts fail, it signals a search error.
+Anna's Archive's DDoS protection sometimes sends a JavaScript challenge instead of search results. The package detects the challenge before parsing and tries the configured mirrors in order. It does not display an EWW buffer or involve an external browser. If all attempts fail, it signals a search error instead of reporting an empty search.
 
 You can change the retry limit and delay with @code{annas-archive-search-retries} and @code{annas-archive-search-retry-delay} (@ref{Search filtering}).
 
 @node No results found
 @section No results found
 
-The package reports ``No results found'' only when Anna's Archive returns its explicit ``No files found'' marker. DDoS-Guard pages, server errors, and unparseable pages are reported separately.
+The package reports ``No results found'' only when a structurally verified Anna's Archive search page returns its explicit ``No files found'' element and explanatory text. DDoS-Guard pages, server errors, bare phrases, and unparseable pages are never classified as empty.
 
 If Anna's Archive returned results but none match @code{annas-archive-included-file-types}, the package says that no results match the configured file types. It will prompt you to retry with all file types if @code{annas-archive-retry-with-all-file-types} is @code{t} (@ref{Search filtering}).
 

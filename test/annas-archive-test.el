@@ -673,6 +673,16 @@ Point starts at `point-min'."
 <p><a href='/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4'>The Book</a></p></body></html>"
   "Minimal HTML for one parseable Anna's Archive result.")
 
+(defconst annas-archive-test--empty-search-html
+  "<html><body>
+<form action='/search' method='get' role='search' class='js-search-form'>
+<input type='search' name='q' class='js-search-main-input'>
+</form>
+<div><span class='font-bold'>No files found.</span>
+Try fewer or different search terms and filters.</div>
+</body></html>"
+  "Minimal structurally valid empty Anna's Archive search page.")
+
 (ert-deftest annas-archive-test-search-detects-transient-responses ()
   "Challenges, rate limits, and server failures should be transient."
   (should (annas-archive--transient-search-response-p
@@ -681,7 +691,43 @@ Point starts at `point-min'."
   (should (annas-archive--transient-search-response-p 503 ""))
   (should (annas-archive--transient-search-response-p
 	   200 "Our servers are not responding"))
+  (should (annas-archive--transient-search-response-p
+	   200 "<html><title>DDoS-Guard</title></html>"))
   (should-not (annas-archive--transient-search-response-p 200 "ok")))
+
+(ert-deftest annas-archive-test-search-rotates-mirrors ()
+  "Search retries should use each configured mirror in order."
+  (let ((annas-archive-search-mirrors
+	 '("annas-archive.pk" "annas-archive.gd")))
+    (should
+     (equal
+      (annas-archive--search-urls
+       "https://annas-archive.gl/search?q=book")
+      '("https://annas-archive.pk/search?q=book"
+	"https://annas-archive.gd/search?q=book"
+	"https://annas-archive.gl/search?q=book")))))
+
+(ert-deftest annas-archive-test-search-retry-uses-next-mirror ()
+  "A transient failure should move the next attempt to the next mirror."
+  (let ((annas-archive-search-mirrors
+	 '("annas-archive.pk" "annas-archive.gd"))
+	(annas-archive-search-retries 1)
+	(annas-archive-search-retry-delay 0)
+	seen-urls)
+    (cl-letf (((symbol-function 'annas-archive--fetch-search-results)
+	       (lambda (url)
+		 (push url seen-urls)
+		 (if (= (length seen-urls) 1)
+		     (signal 'annas-archive-transient-search-error '("guard"))
+		   '((:title "Result"))))))
+      (should
+       (equal (annas-archive--search
+	       "https://annas-archive.gl/search?q=book")
+	      '((:title "Result"))))
+      (should
+       (equal (nreverse seen-urls)
+	      '("https://annas-archive.pk/search?q=book"
+		"https://annas-archive.gd/search?q=book"))))))
 
 (ert-deftest annas-archive-test-search-valid-html-returns-results ()
   "A valid HTML response should return its parsed results."
@@ -693,16 +739,46 @@ Point starts at `point-min'."
     (should (equal (plist-get result :year) "1998"))))
 
 (ert-deftest annas-archive-test-search-explicit-empty-returns-nil ()
-  "Only the explicit empty marker should return nil."
+  "A structurally valid explicit empty page should return nil."
   (should-not
-   (annas-archive--parse-search-html
-    "<html><body>No files found.</body></html>")))
+   (annas-archive--parse-search-response
+    200 annas-archive-test--empty-search-html)))
+
+(ert-deftest annas-archive-test-search-bare-empty-marker-is-malformed ()
+  "A bare empty phrase must not be accepted as a real empty result."
+  (should-error
+   (annas-archive--parse-search-response
+    200 "<html><body>No files found.</body></html>")
+   :type 'annas-archive-transient-search-error))
+
+(ert-deftest annas-archive-test-search-challenge-with-empty-marker-is-transient ()
+  "A challenge must override an incidental empty marker."
+  (should-error
+   (annas-archive--parse-search-response
+    403 annas-archive-test--empty-search-html)
+   :type 'annas-archive-transient-search-error))
 
 (ert-deftest annas-archive-test-search-malformed-html-signals-error ()
   "A non-result page without the empty marker should signal an error."
   (should-error
    (annas-archive--parse-search-html "<html><body>Unexpected</body></html>")
    :type 'user-error))
+
+(ert-deftest annas-archive-test-search-response-malformed-is-transient ()
+  "An unparseable mirror response should permit trying another mirror."
+  (should-error
+   (annas-archive--parse-search-response
+    200 "<html><body>Unexpected</body></html>")
+   :type 'annas-archive-transient-search-error))
+
+(ert-deftest annas-archive-test-direct-transport-error-is-transient ()
+  "Direct network failures should permit trying another mirror."
+  (cl-letf (((symbol-function 'url-retrieve-synchronously)
+	     (lambda (&rest _)
+	       (signal 'file-error '("TLS connection failed")))))
+    (should-error
+     (annas-archive--fetch-search-results "https://example.com")
+     :type 'annas-archive-transient-search-error)))
 
 (ert-deftest annas-archive-test-search-retries-transient-failure ()
   "A transient response should retry and then return valid results."

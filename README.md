@@ -6,14 +6,14 @@
 
 Anna's Archive does not provide a search-results API. The package fetches its HTML search route directly, validates the response, renders it with `shr`, and extracts the metadata needed by `completing-read`. It does not open an `eww` buffer or install browser callbacks. DOI queries use the journals index.
 
-Anna's Archive sometimes returns a DDoS-Guard challenge instead of search results. `annas-archive` detects challenges, server errors, and malformed pages before it can report an empty search. Retries preserve the HTTP cookie session so that Anna's Archive can admit a later attempt. The package reports “No results found” only when Anna's Archive returns its explicit empty-results marker.
+Anna's Archive sometimes returns a DDoS-Guard challenge instead of search results. `annas-archive` detects challenges, network failures, server errors, and malformed pages, then tries the configured mirrors. It reports “No results found” only for a structurally verified Anna's Archive empty-search page; a bare phrase or failed request can never become an empty result.
 
 Two download mechanisms are available:
 
 - **Programmatic download** via the Anna's Archive fast download API. When `annas-archive-secret-key` is set, the package calls the JSON API, retrieves the file asynchronously within Emacs, and saves it to `annas-archive-downloads-dir`.
 - **External browser fallback.** When the API key is not set, the package opens the selected item page in the system's default browser. It can do the same when a programmatic download fails.
 
-The package depends only on libraries bundled with Emacs (`cl-lib`, `json`, `shr`, `url-parse`, and `url-util`).
+The package depends only on libraries bundled with Emacs (`cl-lib`, `dom`, `json`, `shr`, `subr-x`, `url-parse`, and `url-util`).
 
 ## Installation
 
