@@ -8,6 +8,8 @@ Anna's Archive does not provide a search-results API. The package fetches its HT
 
 Anna's Archive sometimes returns a DDoS-Guard challenge instead of search results. `annas-archive` detects challenges, network failures, server errors, and malformed pages, then tries the configured mirrors. It reports “No results found” only for a structurally verified Anna's Archive empty-search page; a bare phrase or failed request can never become an empty result.
 
+A membership is not an absolute requirement for search. Without `annas-archive-secret-key`, the package makes an unauthenticated request. Search works when Anna's Archive admits that request, but Emacs cannot complete a JavaScript challenge when the site returns one. In that case, the package reports a search error. Earlier versions incorrectly treated such challenge pages as empty results, which caused the apparently random “No results found” behavior. A membership key makes search reliable; it does not disable unauthenticated search.
+
 Two download mechanisms are available:
 
 - **Programmatic download** via the Anna's Archive fast download API. The same `annas-archive-secret-key` used for authenticated search enables this mode. The package calls the JSON API, retrieves the file asynchronously within Emacs, and saves it to `annas-archive-downloads-dir`.

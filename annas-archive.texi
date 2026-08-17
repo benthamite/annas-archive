@@ -388,6 +388,10 @@ If you need a temporary manual URL, set @code{annas-archive-home-url-override}. 
 
 Anna's Archive's DDoS protection sometimes sends a JavaScript challenge instead of search results. With @code{annas-archive-secret-key} set, the package signs in through Anna's normal account form and uses the resulting in-memory session for the search. Eligible members then bypass the browser check. The package also detects any remaining challenge before parsing and tries the configured mirrors in order. It does not display an EWW buffer or involve an external browser in search. If all attempts fail, it signals a search error instead of reporting an empty search.
 
+A membership is not an absolute requirement for search. Without @code{annas-archive-secret-key}, the package makes the same unauthenticated request that it used in earlier versions. The search succeeds when Anna's Archive admits that request. If the site returns its JavaScript challenge instead, Emacs cannot complete the challenge, so the package signals a search error. This can make unauthenticated search intermittent.
+
+Earlier versions treated every page with no parseable result links as an empty search. A challenge page therefore appeared as ``No results found,'' which hid the real failure and made the behavior seem random. The current package distinguishes a verified empty search from a challenge or network failure. Setting @code{annas-archive-secret-key} adds a reliable member-authenticated route; it does not disable or restrict unauthenticated search.
+
 You can change the retry limit and delay with @code{annas-archive-search-retries} and @code{annas-archive-search-retry-delay} (@ref{Search filtering}).
 
 @node No results found
