@@ -40,6 +40,8 @@ The package depends only on libraries bundled with Emacs (`cl-lib`, `dom`, `json
 
 ## Quick start
 
+The secret key requires a paid [Anna's Archive membership](https://annas-archive.gl/donate). After you sign in, open your [account page](https://annas-archive.gl/account/), copy the secret key, and set it as shown below:
+
 ```emacs-lisp
 (use-package annas-archive
   :ensure (annas-archive :host github :repo "benthamite/annas-archive")
