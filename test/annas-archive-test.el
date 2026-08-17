@@ -665,23 +665,13 @@ Point starts at `point-min'."
       ;; Should not error; display string should exist
       (should (stringp (car (car cands)))))))
 
-;;;; Search handling
+;;;; Direct search handling
 
 (defconst annas-archive-test--result-html
   "<html><body><p><a href='/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4'>*</a></p>
 <p>book.epub</p><p>English · EPUB · 1998 · 1.2 MB</p>
 <p><a href='/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4'>The Book</a></p></body></html>"
   "Minimal HTML for one parseable Anna's Archive result.")
-
-(defconst annas-archive-test--empty-search-html
-  "<html><body>
-<form action='/search' method='get' role='search' class='js-search-form'>
-<input type='search' name='q' class='js-search-main-input'>
-</form>
-<div><span class='font-bold'>No files found.</span>
-Try fewer or different search terms and filters.</div>
-</body></html>"
-  "Minimal structurally valid empty Anna's Archive search page.")
 
 (ert-deftest annas-archive-test-search-detects-transient-responses ()
   "Challenges, rate limits, and server failures should be transient."
@@ -691,201 +681,7 @@ Try fewer or different search terms and filters.</div>
   (should (annas-archive--transient-search-response-p 503 ""))
   (should (annas-archive--transient-search-response-p
 	   200 "Our servers are not responding"))
-  (should (annas-archive--transient-search-response-p
-	   200 "<html><title>DDoS-Guard</title></html>"))
-  (should-not (annas-archive--transient-search-response-p
-	       200 "// text/css for DDOS-GUARD caching"))
   (should-not (annas-archive--transient-search-response-p 200 "ok")))
-
-(ert-deftest annas-archive-test-search-backend-auto-selection ()
-  "The automatic backend should use Chrome only while its bridge exists."
-  (let* ((socket (make-temp-file "annas-archive-test-socket-"))
-	 (annas-archive-chrome-bridge-socket socket)
-	 (annas-archive-search-backend 'auto))
-    (unwind-protect
-	(progn
-	  (should (eq (annas-archive--effective-search-backend) 'chrome))
-	  (delete-file socket)
-	  (should (eq (annas-archive--effective-search-backend) 'direct)))
-      (when (file-exists-p socket)
-	(delete-file socket)))))
-
-(ert-deftest annas-archive-test-search-rotates-mirrors ()
-  "Search retries should use each configured mirror in order."
-  (let ((annas-archive-search-mirrors
-	 '("annas-archive.pk" "annas-archive.gd")))
-    (should
-     (equal
-      (annas-archive--search-urls
-       "https://annas-archive.gl/search?q=book")
-      '("https://annas-archive.pk/search?q=book"
-	"https://annas-archive.gd/search?q=book"
-	"https://annas-archive.gl/search?q=book")))))
-
-(ert-deftest annas-archive-test-search-retry-uses-next-mirror ()
-  "A transient failure should move the next attempt to the next mirror."
-  (let ((annas-archive-search-mirrors
-	 '("annas-archive.pk" "annas-archive.gd"))
-	(annas-archive-search-retries 1)
-	(annas-archive-search-retry-delay 0)
-	seen-urls)
-    (cl-letf (((symbol-function 'annas-archive--fetch-search-results)
-	       (lambda (url)
-		 (push url seen-urls)
-		 (if (= (length seen-urls) 1)
-		     (signal 'annas-archive-transient-search-error '("guard"))
-		   '((:title "Result"))))))
-      (should
-       (equal (annas-archive--search
-	       "https://annas-archive.gl/search?q=book")
-	      '((:title "Result"))))
-      (should
-       (equal (nreverse seen-urls)
-	      '("https://annas-archive.pk/search?q=book"
-		"https://annas-archive.gd/search?q=book"))))))
-
-(ert-deftest annas-archive-test-search-dispatches-to-selected-backend ()
-  "Search fetching should dispatch to the selected backend."
-  (let ((annas-archive-search-backend 'chrome))
-    (cl-letf (((symbol-function 'annas-archive--fetch-search-results-with-chrome)
-	       (lambda (url) (list :chrome url)))
-	      ((symbol-function 'annas-archive--fetch-search-results-directly)
-	       (lambda (url) (list :direct url))))
-      (should (equal (annas-archive--fetch-search-results "https://example.com")
-		     '(:chrome "https://example.com"))))))
-
-(ert-deftest annas-archive-test-chrome-search-parses-saved-html ()
-  "The Chrome backend should parse the live DOM that Chrome returns."
-  (let (called-url)
-    (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	       (lambda (url)
-		 (setq called-url url)
-		 `((outcome . "success")
-		   (html . ,annas-archive-test--result-html)))))
-      (let ((result (car (annas-archive--fetch-search-results-with-chrome
-			  "https://example.com/search?q=book"))))
-	(should (equal called-url "https://example.com/search?q=book"))
-	(should (equal (plist-get result :title) "The Book"))))))
-
-(ert-deftest annas-archive-test-chrome-search-challenge-is-transient ()
-  "A challenge DOM must never become an empty result."
-  (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	     (lambda (_url)
-	       '((outcome . "success")
-		 (html . "<html><title>DDoS-Guard</title></html>")))))
-    (should-error
-     (annas-archive--fetch-search-results-with-chrome "https://example.com")
-     :type 'annas-archive-transient-search-error)))
-
-(ert-deftest annas-archive-test-chrome-transient-outcome-is-retried ()
-  "The Chrome bridge's transient outcome should remain transient."
-  (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	     (lambda (_url)
-	       '((outcome . "transient") (message . "challenge")))))
-    (should-error
-     (annas-archive--fetch-search-results-with-chrome "https://example.com")
-     :type 'annas-archive-transient-search-error)))
-
-(ert-deftest annas-archive-test-chrome-malformed-outcome-is-retried ()
-  "A malformed mirror response should not stop mirror rotation."
-  (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	     (lambda (_url)
-	       '((outcome . "malformed") (message . "unexpected page")))))
-    (should-error
-     (annas-archive--fetch-search-results-with-chrome "https://example.com")
-     :type 'annas-archive-transient-search-error)))
-
-(ert-deftest annas-archive-test-chrome-success-cannot-claim-empty-page ()
-  "Only an explicit empty bridge outcome may produce an empty result."
-  (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	     (lambda (_url)
-	       `((outcome . "success")
-		 (html . ,annas-archive-test--empty-search-html)))))
-    (should-error
-     (annas-archive--fetch-search-results-with-chrome "https://example.com")
-     :type 'annas-archive-transient-search-error)))
-
-(ert-deftest annas-archive-test-chrome-empty-outcome-requires-valid-page ()
-  "A bridge empty outcome should still require the real search structure."
-  (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	     (lambda (_url)
-	       '((outcome . "empty")
-		 (html . "<html><body>No files found.</body></html>")))))
-    (should-error
-     (annas-archive--fetch-search-results-with-chrome "https://example.com")
-     :type 'annas-archive-transient-search-error)))
-
-(ert-deftest annas-archive-test-chrome-records-focus-telemetry ()
-  "The Chrome backend should retain telemetry for end-to-end checks."
-  (let ((annas-archive--last-chrome-telemetry nil))
-    (cl-letf (((symbol-function 'annas-archive--chrome-bridge-request)
-	       (lambda (_url)
-		 `((outcome . "success")
-		   (html . ,annas-archive-test--result-html)
-		   (telemetry . ((createdTabClosed . t)))))))
-      (annas-archive--fetch-search-results-with-chrome "https://example.com")
-      (should (eq (alist-get 'createdTabClosed
-			     annas-archive--last-chrome-telemetry)
-		  t)))))
-
-(ert-deftest annas-archive-test-results-override-stale-challenge-title ()
-  "Real results should override Chrome's stale DDoS-Guard title."
-  (let* ((html (replace-regexp-in-string
-		"<html>" "<html><title>DDoS-Guard</title>"
-		annas-archive-test--result-html))
-	 (result (car (annas-archive--parse-search-response 200 html))))
-    (should (equal (plist-get result :title) "The Book"))))
-
-(ert-deftest annas-archive-test-chrome-bridge-round-trip ()
-  "The bridge client should send JSON and parse the matching response."
-  (let* ((directory (make-temp-file "annas-archive-test-bridge-" t))
-	 (socket (expand-file-name "bridge.sock" directory))
-	 (annas-archive-chrome-bridge-socket socket)
-	 (annas-archive-chrome-timeout 1)
-	 requested-url
-	 server)
-    (unwind-protect
-	(progn
-	  (setq server
-		(make-network-process
-		 :name "annas-archive-test-server"
-		 :family 'local
-		 :service socket
-		 :server t
-		 :coding 'utf-8-unix
-		 :noquery t
-		 :filter
-		 (lambda (process input)
-		   (let* ((pending (concat (or (process-get process 'pending) "")
-				   input))
-			  (line-end (string-match "\n" pending)))
-		     (if (not line-end)
-			 (process-put process 'pending pending)
-		       (let* ((json-object-type 'alist)
-			      (json-key-type 'symbol)
-			      (request (json-read-from-string
-					(substring pending 0 line-end)))
-			      (request-id (alist-get 'id request)))
-			 (setq requested-url (alist-get 'url request))
-			 (process-send-string
-			  process
-			  (concat
-			   (json-encode
-			    `((action . "fetch_result")
-			      (id . ,request-id)
-			      (outcome . "transient")
-			      (message . "guard")))
-			   "\n"))
-			 (delete-process process)))))))
-	  (let ((response
-		 (annas-archive--chrome-bridge-request
-		  "https://annas-archive.pk/search?q=book")))
-	    (should (equal requested-url
-			   "https://annas-archive.pk/search?q=book"))
-	    (should (equal (alist-get 'outcome response) "transient"))))
-      (when (process-live-p server)
-	(delete-process server))
-      (delete-directory directory t))))
 
 (ert-deftest annas-archive-test-search-valid-html-returns-results ()
   "A valid HTML response should return its parsed results."
@@ -897,68 +693,16 @@ Try fewer or different search terms and filters.</div>
     (should (equal (plist-get result :year) "1998"))))
 
 (ert-deftest annas-archive-test-search-explicit-empty-returns-nil ()
-  "A structurally valid explicit empty page should return nil."
+  "Only the explicit empty marker should return nil."
   (should-not
-   (annas-archive--parse-search-response
-    200 annas-archive-test--empty-search-html)))
-
-(ert-deftest annas-archive-test-search-bare-empty-marker-is-malformed ()
-  "A bare empty phrase must not be accepted as a real empty result."
-  (should-error
-   (annas-archive--parse-search-response
-    200 "<html><body>No files found.</body></html>")
-   :type 'annas-archive-transient-search-error))
-
-(ert-deftest annas-archive-test-search-challenge-with-empty-marker-is-transient ()
-  "A challenge must override an incidental empty marker."
-  (should-error
-   (annas-archive--parse-search-response
-    403
-    "<html><body>No files found.</body></html>")
-   :type 'annas-archive-transient-search-error))
+   (annas-archive--parse-search-html
+    "<html><body>No files found.</body></html>")))
 
 (ert-deftest annas-archive-test-search-malformed-html-signals-error ()
   "A non-result page without the empty marker should signal an error."
   (should-error
    (annas-archive--parse-search-html "<html><body>Unexpected</body></html>")
    :type 'user-error))
-
-(ert-deftest annas-archive-test-search-response-malformed-is-transient ()
-  "An unparseable mirror response should permit trying another mirror."
-  (should-error
-   (annas-archive--parse-search-response
-    200 "<html><body>Unexpected</body></html>")
-   :type 'annas-archive-transient-search-error))
-
-(ert-deftest annas-archive-test-direct-transport-error-is-transient ()
-  "Direct network failures should permit trying another mirror."
-  (cl-letf (((symbol-function 'url-retrieve-synchronously)
-	     (lambda (&rest _)
-	       (signal 'file-error '("TLS connection failed")))))
-    (should-error
-     (annas-archive--fetch-search-results-directly "https://example.com")
-     :type 'annas-archive-transient-search-error)))
-
-(ert-deftest annas-archive-test-missing-bridge-does-not-leak-buffer ()
-  "A missing bridge socket should not allocate a hidden response buffer."
-  (let* ((annas-archive-chrome-bridge-socket
-	  (make-temp-name (expand-file-name "missing-bridge-"
-					      temporary-file-directory)))
-	 (before (cl-count-if
-		  (lambda (buffer)
-		    (string-prefix-p " *annas-archive-chrome*"
-				     (buffer-name buffer)))
-		  (buffer-list))))
-    (should-error
-     (annas-archive--chrome-bridge-request
-      "https://annas-archive.pk/search?q=book")
-     :type 'user-error)
-    (should
-     (= before
-	(cl-count-if
-	 (lambda (buffer)
-	   (string-prefix-p " *annas-archive-chrome*" (buffer-name buffer)))
-	 (buffer-list))))))
 
 (ert-deftest annas-archive-test-search-retries-transient-failure ()
   "A transient response should retry and then return valid results."

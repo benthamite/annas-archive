@@ -22,7 +22,7 @@ This manual describes the features and customization options for the Emacs Lisp 
 
 The development repository is on [[https://github.com/benthamite/annas-archive][GitHub]].
 
-Anna's Archive does not provide a search-results API. When the [[https://github.com/benthamite/chrome-to-eww][Chrome to Emacs bridge]] is available, the default search backend loads the HTML search route in an inactive tab of an existing Google Chrome window. The extension runs JavaScript challenges in the admitted browser session, returns the final DOM, and closes only the tab it created. It never starts Chrome, creates a Chrome window, selects a tab, or focuses a window. The package validates the HTML, renders it with =shr=, extracts bibliographic metadata (title, file type, size, language, and year), and presents the results via ~completing-read~. It does not use =eww= for searches.
+Anna's Archive does not provide a search-results API. The package therefore fetches the HTML search route directly with Emacs's URL library, validates the response, renders it with =shr=, and extracts bibliographic metadata (title, file type, size, language, and year). It then presents the results via ~completing-read~. The request and selection happen in the same command invocation; the package does not open an =eww= buffer or install browser callbacks.
 
 Two download mechanisms are available:
 
@@ -30,7 +30,7 @@ Two download mechanisms are available:
 
 - *External browser fallback.* When the API key is not set, the package opens the selected item page in the system's default browser. When a programmatic download fails, ~annas-archive-when-download-fails~ controls the fallback ([[#h:download-failure-handling][Download failure handling]]).
 
-The Elisp code depends only on libraries bundled with Emacs. The optional Chrome backend requires an existing Google Chrome window and the Chrome to Emacs extension and native host. Without the bridge, the default ~auto~ backend uses direct HTTP, which cannot execute JavaScript challenges.
+The package depends only on libraries bundled with Emacs: =cl-lib=, =json=, =shr=, =url-parse=, and =url-util=.
 
 ** DOI support
 :PROPERTIES:
@@ -101,15 +101,6 @@ If you use ~use-package~, add one of the following snippets to your init file:
   :quelpa (annas-archive :fetcher github :repo "benthamite/annas-archive"))
 #+end_src
 
-** Chrome bridge
-:PROPERTIES:
-:CUSTOM_ID: h:chrome-bridge-installation
-:END:
-
-For reliable searches when Anna's Archive enables its JavaScript challenge, install the [[https://github.com/benthamite/chrome-to-eww][Chrome to Emacs bridge]] in the Chrome profile that should perform searches. Follow that project's installation instructions to load the extension and register its native host, then reload Chrome once. The extension creates search tabs with ~active: false~ and removes them after it returns the DOM.
-
-The default ~auto~ backend detects the bridge's private Unix-domain socket. Set ~annas-archive-search-backend~ to ~chrome~ to require the bridge or to ~direct~ to bypass it.
-
 * User options
 :PROPERTIES:
 :CUSTOM_ID: h:user-options
@@ -167,9 +158,6 @@ A programmatic download can fail for several reasons: the fast download API may 
 #+vindex: annas-archive-retry-with-all-file-types
 #+vindex: annas-archive-search-retries
 #+vindex: annas-archive-search-retry-delay
-#+vindex: annas-archive-search-backend
-#+vindex: annas-archive-search-mirrors
-#+vindex: annas-archive-chrome-bridge-socket
 
 The user option ~annas-archive-included-file-types~ specifies which file extensions to include when displaying search results. The value is a list of lowercase extension strings. The default includes all types supported by the package: =pdf=, =epub=, =fb2=, =mobi=, =cbr=, =djvu=, =cbz=, =txt=, and =azw3=.
 
@@ -180,10 +168,6 @@ If you only want PDF and EPUB results, for example:
 #+end_src
 
 The user option ~annas-archive-retry-with-all-file-types~ controls whether the package automatically retries a search with all supported file types when the filtered search returns no results. When set to ~t~ (the default), the package prompts with a =y-or-n= question before retrying. Set it to ~nil~ to disable this behavior.
-
-The user option ~annas-archive-search-backend~ controls how the package obtains search HTML. Its default value, ~auto~, uses the Chrome bridge when its socket exists and direct HTTP otherwise. Set it to ~chrome~ to require the bridge or to ~direct~ to require Emacs's URL library. The Chrome backend can execute Anna's Archive's browser challenge. The direct backend cannot.
-
-The user option ~annas-archive-search-mirrors~ sets the ordered hostnames tried after transient failures. The package rotates mirrors instead of repeatedly requesting one blocked host. ~annas-archive-chrome-bridge-socket~ overrides the bridge's standard private socket path when a custom installation uses another location.
 
 Anna's Archive sometimes returns a DDoS-Guard challenge or a temporary server-error page in place of the search results. The package detects these responses and retries instead of reporting that the search has no results. ~annas-archive-search-retries~ sets the maximum number of retries (10 by default), while ~annas-archive-search-retry-delay~ sets the delay between attempts in seconds (1 by default). Each retry is reported in the echo area.
 
@@ -230,7 +214,7 @@ The command ~annas-archive-download~ is the main entry point for the package. Wh
 - An ISBN.
 - A DOI (e.g. =10.1145/1458082.1458150=) for academic papers.
 
-The command obtains Anna's Archive's HTML search results through ~annas-archive-search-backend~, parses titles, file types, sizes, languages, and publication years, and presents them in a formatted ~completing-read~ interface. The Chrome backend uses an inactive tab in an existing window and does not select it or change window focus. A DDoS-Guard challenge or temporary server error causes mirror rotation and a bounded automatic retry rather than a false "No results found" message. A malformed page produces an error. After you select a result, the package passes its MD5 to the fast download API or opens the item page in the default browser.
+The command fetches Anna's Archive's HTML search results directly, parses titles, file types, sizes, languages, and publication years, and presents them in a formatted ~completing-read~ interface. A DDoS-Guard challenge or temporary server error causes a bounded automatic retry rather than a false "No results found" message. A malformed page produces an error. After you select a result, the package passes its MD5 to the fast download API or opens the item page in the default browser.
 
 When the search string is a DOI, the command makes an exact DOI search in the journals index ([[#h:doi-support][DOI support]]).
 
@@ -307,9 +291,7 @@ If you need a temporary manual URL, set ~annas-archive-home-url-override~. The o
 :CUSTOM_ID: h:ddos-guard-challenges
 :END:
 
-Anna's Archive's DDoS protection sometimes sends a JavaScript challenge instead of search results. The Chrome backend uses the existing admitted browser session, creates an inactive tab, waits for a validated result or explicit empty page, and closes the tab. It never selects the tab or changes window focus. The package detects challenge and server-error pages, rotates to another configured mirror, and retries. If all attempts fail, it signals a search error.
-
-The ~direct~ backend detects the same failures, but Emacs's URL library cannot execute the JavaScript challenge. Use that backend only when direct requests work in your environment.
+Anna's Archive's DDoS protection sometimes sends a JavaScript challenge instead of search results. The package detects the challenge before parsing, waits briefly, and retries with the same HTTP cookie session. Preserving the paired DDoS-Guard cookies lets a later request use any admission state that Anna's Archive granted during an earlier attempt. The package reports each retry in the echo area. If all attempts fail, it signals a search error.
 
 You can change the retry limit and delay with ~annas-archive-search-retries~ and ~annas-archive-search-retry-delay~ ([[#h:search-filtering][Search filtering]]).
 
@@ -318,7 +300,7 @@ You can change the retry limit and delay with ~annas-archive-search-retries~ and
 :CUSTOM_ID: h:no-results
 :END:
 
-The package reports "No results found" only when a completed Anna's Archive search page returns its explicit "No files found" marker without any challenge or server-error marker. Parseable results take precedence over stale challenge titles. DDoS-Guard pages, server errors, and unparseable pages are reported separately.
+The package reports "No results found" only when Anna's Archive returns its explicit "No files found" marker. DDoS-Guard pages, server errors, and unparseable pages are reported separately.
 
 If Anna's Archive returned results but none match ~annas-archive-included-file-types~, the package says that no results match the configured file types. It will prompt you to retry with all file types if ~annas-archive-retry-with-all-file-types~ is ~t~ ([[#h:search-filtering][Search filtering]]).
 

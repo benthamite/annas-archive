@@ -4,11 +4,9 @@
 
 ![demo](demo.gif)
 
-Anna's Archive does not provide a search-results API. When the [Chrome to Emacs bridge](https://github.com/benthamite/chrome-to-eww) is available, the package loads its HTML search route in an inactive tab of an existing Chrome window. The extension runs JavaScript challenges in the admitted browser session, returns the final DOM, and closes only its own tab. It never creates or focuses a window and never selects the search tab. The package validates the HTML, renders it with `shr`, and extracts the metadata needed by `completing-read`. It does not use `eww` for searches. DOI queries use the journals index.
+Anna's Archive does not provide a search-results API. The package fetches its HTML search route directly, validates the response, renders it with `shr`, and extracts the metadata needed by `completing-read`. It does not open an `eww` buffer or install browser callbacks. DOI queries use the journals index.
 
-Anna's Archive sometimes returns a DDoS-Guard challenge instead of search results. `annas-archive` uses the existing Chrome session when the bridge is running, rotates across configured mirrors after transient failures, and detects challenges, server errors, and malformed pages before it can report an empty search. It reports “No results found” only for a completed search page with Anna's Archive's explicit empty-results marker.
-
-For reliable searches, install the Chrome to Emacs extension and native host, then reload Chrome once. The default `auto` backend detects its private socket. Set `annas-archive-search-backend` to `chrome` to require the bridge or to `direct` to use Emacs's URL library; direct HTTP cannot execute JavaScript challenges.
+Anna's Archive sometimes returns a DDoS-Guard challenge instead of search results. `annas-archive` detects challenges, server errors, and malformed pages before it can report an empty search. Retries preserve the HTTP cookie session so that Anna's Archive can admit a later attempt. The package reports “No results found” only when Anna's Archive returns its explicit empty-results marker.
 
 Two download mechanisms are available:
 
