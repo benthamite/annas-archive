@@ -4,7 +4,7 @@
 
 ;; Author: Pablo Stafforini
 ;; URL: https://github.com/benthamite/annas-archive
-;; Version: 0.1
+;; Version: 0.2
 
 ;; This file is NOT part of GNU Emacs.
 
