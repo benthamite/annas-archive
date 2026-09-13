@@ -227,22 +227,39 @@ was downloaded programmatically, the destination path as its second argument."
 ;;;; Functions
 
 ;;;###autoload
-(defun annas-archive-download (&optional string)
-  "Search Anna’s Archive for STRING and download the selected item.
-STRING can be a descriptive text (such as the book’s title), an ISBN or (for
-papers) a DOI.
-
-When called interactively, always prompt for STRING. When called
-non-interactively, never prompt; signal an error if STRING is nil or empty."
+(defun annas-archive-download (&optional string callback noninteractive-p)
+  "Search for STRING and download the selected item.
+CALLBACK receives STATUS, PATH and ERROR once for this request.  STATUS is
+`complete', `external', `blocked' or `failed'.  With NONINTERACTIVE-P, never
+prompt or open a browser; ambiguous results and unavailable downloads fail.
+Calls without CALLBACK retain `annas-archive-post-download-hook'."
   (interactive)
-  (let* ((prompt "Search string: ")
-	 (string (if (called-interactively-p 'interactive)
-		     (read-string prompt)
-		   (annas-archive--require-nonempty-string string)))
-	 (results (annas-archive--search (annas-archive--url-for-query string))))
-    (if results
-	(annas-archive--select-results results)
-      (message "No results found"))))
+  (let* ((request (list :callback callback :noninteractive noninteractive-p
+                        :finished nil))
+         (string (if (called-interactively-p 'interactive)
+                     (read-string "Search string: ")
+                   (annas-archive--require-nonempty-string string))))
+    (condition-case err
+        (let ((results (annas-archive--search
+                        (annas-archive--url-for-query string))))
+          (if results
+              (annas-archive--select-results results request)
+            (annas-archive--finish-request request 'blocked nil "No results found")
+            (message "No results found")))
+      (quit
+       (annas-archive--finish-request request 'blocked nil "Archive request cancelled")
+       (signal (car err) (cdr err)))
+      (error
+       (annas-archive--finish-request request 'failed nil
+                                      "Archive search or download failed")
+       (signal (car err) (cdr err))))))
+
+(defun annas-archive--finish-request (request status &optional path error)
+  "Deliver STATUS, PATH and ERROR to REQUEST's callback exactly once."
+  (unless (plist-get request :finished)
+    (setf (plist-get request :finished) t)
+    (when-let ((callback (plist-get request :callback)))
+      (funcall callback status path error))))
 
 ;;;;; Parsing
 
@@ -712,9 +729,10 @@ If TYPES is nil, use `annas-archive-included-file-types'."
   (interactive)
   (annas-archive--select-result (annas-archive-parse-results) types))
 
-(defun annas-archive--select-result (results &optional types)
+(defun annas-archive--select-result (results &optional types request)
   "Prompt for one item from RESULTS and download it.
-Only include result TYPES, or `annas-archive-included-file-types' if nil."
+Only include result TYPES, or `annas-archive-included-file-types' if nil.
+REQUEST carries the completion callback and noninteractive policy."
   (let* ((wanted (mapcar #'downcase
 			 (or types annas-archive-included-file-types)))
 	 (filtered (cl-remove-if-not
@@ -723,9 +741,14 @@ Only include result TYPES, or `annas-archive-included-file-types' if nil."
 	 (cands (annas-archive--format-candidates filtered)))
     (if (null cands)
 	(signal 'annas-archive-no-matching-results (list wanted))
-      (let* ((choice (completing-read "Select a link: " (mapcar #'car cands) nil t))
+      (let* ((choice (if (plist-get request :noninteractive)
+                         (if (= (length cands) 1)
+                             (caar cands)
+                           (user-error "Archive selection is ambiguous (%d candidates)"
+                                       (length cands)))
+                       (completing-read "Select a link: " (mapcar #'car cands) nil t)))
 	     (url    (cdr (assoc choice cands))))
-	(annas-archive--download-result url)))))
+	(annas-archive--download-result url request)))))
 
 (defun annas-archive--format-candidates (results)
   "Return formatted candidates from RESULTS for completion.
@@ -761,39 +784,44 @@ spaces."
 
 ;;;;; Selection
 
-(defun annas-archive--select-results (results)
+(defun annas-archive--select-results (results &optional request)
   "Prompt for one result from validated Anna's Archive RESULTS.
 Retry with all supported file types when the included types yield no hits and
-`annas-archive-retry-with-all-file-types' is non-nil."
+`annas-archive-retry-with-all-file-types' is non-nil.
+REQUEST carries the completion callback and noninteractive policy."
   (condition-case nil
-      (annas-archive--select-result results)
+      (annas-archive--select-result results nil request)
     (annas-archive-no-matching-results
+     (when (plist-get request :noninteractive)
+       (user-error "No archive results match configured file types"))
      (if (and annas-archive-retry-with-all-file-types
 	      (not (equal (sort (copy-sequence annas-archive-included-file-types) #'string<)
 			  (sort (copy-sequence annas-archive-supported-file-types) #'string<)))
 	      (y-or-n-p "No results match configured file types. Try all supported types? "))
 	 (condition-case nil
 	     (annas-archive--select-result
-	      results annas-archive-supported-file-types)
+	      results annas-archive-supported-file-types request)
 	   (annas-archive-no-matching-results
-	    (message "Search results contain no supported file types")))
+	    (annas-archive--finish-request request 'blocked nil "No supported file types")
+            (message "Search results contain no supported file types")))
+       (annas-archive--finish-request request 'blocked nil "No matching file types selected")
        (message "No results match configured file types")))))
 
 ;;;;; Downloading
 
 (autoload 'browse-url-default-browser "browse-url")
 
-(defun annas-archive--download-result (page-url)
-  "Download the item at PAGE-URL without visiting its page in Emacs."
+(defun annas-archive--download-result (page-url &optional request)
+  "Download PAGE-URL using REQUEST's callback and noninteractive policy."
   (let ((page-url (url-expand-file-name page-url
 					(annas-archive--home-url))))
     (if (annas-archive--use-fast-download-api-p)
 	(let* ((md5 (annas-archive--md5-from-url page-url))
 	       (download-url (and md5 (annas-archive--fast-download-api md5))))
 	  (if download-url
-	      (annas-archive-download-file-internally download-url)
-	    (annas-archive-handle-download-failure page-url)))
-      (annas-archive-download-file-externally page-url))))
+	      (annas-archive-download-file-internally download-url request)
+	    (annas-archive-handle-download-failure page-url request)))
+      (annas-archive-download-file-externally page-url request))))
 
 (defun annas-archive--use-fast-download-api-p ()
   "Return non-nil when the fast download API can be used."
@@ -854,24 +882,35 @@ Returns the download URL string, or nil on failure."
 		 nil))))
 	(kill-buffer buffer)))))
 
-(defun annas-archive-download-file-internally (url)
-  "Download the file at URL programmatically within Emacs."
-  (url-retrieve url (annas-archive-download-file-callback url))
+(defun annas-archive-download-file-internally (url &optional request)
+  "Download URL within Emacs, retaining REQUEST for completion."
+  (url-retrieve url (annas-archive-download-file-callback url request))
   (message "Found download link. Proceeding to download..."))
 
-(defun annas-archive-download-file-externally (url)
+(defun annas-archive-download-file-externally (url &optional request)
   "Download the file in URL with the default browser.
-URL is the URL of the download link."
-  (browse-url-default-browser url)
-  (run-hook-with-args 'annas-archive-post-download-hook url))
+URL is the download link; REQUEST carries its callback and policy."
+  (if (plist-get request :noninteractive)
+      (annas-archive--finish-request request 'blocked nil
+                                    "Archive download requires a browser")
+    (browse-url-default-browser url)
+    (if (plist-get request :callback)
+        (annas-archive--finish-request request 'external)
+      (run-hook-with-args 'annas-archive-post-download-hook url))))
 
-(defun annas-archive-download-file-callback (url)
+(defun annas-archive-download-file-callback (url &optional request)
   "Return a callback for saving the file downloaded from URL.
-URL is the download URL passed to `url-retrieve'."
-  (lambda (status)
+URL is passed to `url-retrieve'; REQUEST retains its completion policy."
+  (let (delivered)
+   (lambda (status)
     "STATUS is the status of the download process; see `url-retrieve' for details."
-    (if-let ((err (plist-get status :error)))
-	(message "Download failed: %s" err)
+    (unless (or delivered (plist-get request :finished))
+     (setq delivered t)
+    (condition-case _err
+      (if (plist-get status :error)
+	(progn
+          (annas-archive--finish-request request 'failed nil "Archive download failed")
+          (message "Archive download failed"))
       (let* ((redirect (plist-get status :redirect))
 	     (extension (or (annas-archive--extension-from-url redirect)
 			    (annas-archive--extension-from-headers)
@@ -882,13 +921,16 @@ URL is the download URL passed to `url-retrieve'."
 	(when (re-search-forward "\r?\n\r?\n" nil t)
 	  (delete-region (point-min) (point)))
 	(if (annas-archive--response-body-html-p)
-	    (annas-archive-handle-download-failure url)
+	    (annas-archive-handle-download-failure url request)
 	  (let* ((base (make-temp-name "downloaded-from-annas-archive-"))
 		 (filename (file-name-with-extension base extension))
 		 (path (file-name-concat annas-archive-downloads-dir filename)))
 	    (if (and (stringp path) (not (string-empty-p path)))
-		(annas-archive-save-file url path)
-	      (annas-archive-handle-download-failure url))))))))
+		(annas-archive-save-file url path request)
+	      (annas-archive-handle-download-failure url request))))))
+      (error
+       (annas-archive--finish-request request 'failed nil "Archive download could not be saved")
+       (message "Archive download could not be saved")))))))
 
 (defun annas-archive--response-body-html-p ()
   "Return non-nil if the current buffer appears to contain HTML.
@@ -918,27 +960,36 @@ URL is the original download URL passed to `url-retrieve'."
     (file-name-extension (url-file-nondirectory
 			  (car (url-path-and-query (url-generic-parse-url url)))))))
 
-(defun annas-archive-save-file (url path)
-  "Save the file at URL to PATH."
+(defun annas-archive-save-file (url path &optional request)
+  "Save URL to PATH and complete REQUEST, or run the legacy download hook."
   (let ((dir (file-name-directory path)))
     (unless (file-directory-p dir)
       (make-directory dir t)))
   (let ((coding-system-for-write 'no-conversion))
     (write-region (point-min) (point-max) path))
   (message "Downloaded file: `%s'" path)
-  (run-hook-with-args 'annas-archive-post-download-hook url path))
+  (if (plist-get request :callback)
+      (annas-archive--finish-request request 'complete path)
+    (run-hook-with-args 'annas-archive-post-download-hook url path)))
 
-(defun annas-archive-handle-download-failure (url)
+(defun annas-archive-handle-download-failure (url &optional request)
   "Take appropriate action when a programmatic download fails for URL.
 Depending on the value of `annas-archive-when-download-fails', download
-externally, signal an error, or fail silently."
+externally, signal an error, or fail silently.  REQUEST retains its policy."
   (let ((msg "Failed to download file programmatically"))
+    (when (plist-get request :noninteractive)
+      (annas-archive--finish-request request 'failed nil msg)
+      (user-error "%s" msg))
     (pcase annas-archive-when-download-fails
       ('external
-       (annas-archive-download-file-externally url)
+       (annas-archive-download-file-externally url request)
        (message (concat msg ". Downloading with the default browser instead")))
-      ('error (user-error "%s" msg))
-      (_ (message "%s" msg)))))
+      ('error
+       (annas-archive--finish-request request 'failed nil msg)
+       (user-error "%s" msg))
+      (_
+       (annas-archive--finish-request request 'failed nil msg)
+       (message "%s" msg)))))
 
 ;;;; Migration warning
 

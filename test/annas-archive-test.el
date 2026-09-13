@@ -939,7 +939,7 @@ Try fewer or different search terms and filters.</div>
   (annas-archive-test--with-home-url-override "https://annas-archive.gl/"
     (let (opened)
       (cl-letf (((symbol-function 'annas-archive-download-file-externally)
-		 (lambda (url) (setq opened url))))
+		 (lambda (url &rest _) (setq opened url))))
 	(annas-archive--download-result
 	 "/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4")
 	(should (equal opened
@@ -955,7 +955,7 @@ Try fewer or different search terms and filters.</div>
 		   (setq requested-md5 md5)
 		   "https://files.example/book.epub"))
 		((symbol-function 'annas-archive-download-file-internally)
-		 (lambda (url) (setq downloaded url))))
+		 (lambda (url &rest _) (setq downloaded url))))
 	(annas-archive--download-result
 	 "/md5/d6e1dc51a7b0dcdc3e2ef164a0f1e6b4")
 	(should (equal requested-md5
@@ -1069,3 +1069,143 @@ Try fewer or different search terms and filters.</div>
   (should (member "djvu" annas-archive-supported-file-types)))
 
 ;;; annas-archive-test.el ends here
+
+
+(ert-deftest annas-archive-test-request-callbacks-keep-separate-ownership ()
+  "Out-of-order completions retain per-request callbacks and fire once."
+  (let (events)
+    (let ((a (list :callback (lambda (&rest result) (push (cons 'a result) events))
+                   :finished nil))
+          (b (list :callback (lambda (&rest result) (push (cons 'b result) events))
+                   :finished nil)))
+      (annas-archive--finish-request b 'complete "/tmp/b.pdf")
+      (annas-archive--finish-request a 'failed nil "failed")
+      (annas-archive--finish-request a 'complete "/tmp/late.pdf")
+      (should (equal (nreverse events)
+                     '((b complete "/tmp/b.pdf" nil) (a failed nil "failed")))))))
+
+(ert-deftest annas-archive-test-headless-ambiguity-never-prompts ()
+  "Multiple candidates produce a terminal failure without completion UI."
+  (let ((annas-archive-included-file-types '("pdf")) result)
+    (cl-letf (((symbol-function 'annas-archive--url-for-query) #'identity)
+              ((symbol-function 'annas-archive--search)
+               (lambda (_url) '((:title "A" :url "/md5/a" :type "pdf")
+                                 (:title "B" :url "/md5/b" :type "pdf"))))
+              ((symbol-function 'completing-read)
+               (lambda (&rest _) (ert-fail "Unexpected prompt"))))
+      (should-error
+       (annas-archive-download "paper" (lambda (&rest args) (setq result args)) t)
+       :type 'user-error)
+      (should (eq (car result) 'failed)))))
+
+(ert-deftest annas-archive-test-request-manual-filter-decline-completes-once ()
+  "Declining a broader search completes the original request without downloading."
+  (let ((annas-archive-included-file-types '("pdf"))
+        (annas-archive-supported-file-types '("pdf" "epub"))
+        (annas-archive-retry-with-all-file-types t)
+        (prompts 0) events)
+    (cl-letf (((symbol-function 'annas-archive--url-for-query) #'identity)
+              ((symbol-function 'annas-archive--search)
+               (lambda (_) '((:title "Book" :url "/book" :type "epub"))))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) nil))
+              ((symbol-function 'annas-archive--download-result)
+               (lambda (&rest _) (ert-fail "Declined request downloaded"))))
+      (annas-archive-download "book" (lambda (&rest result) (push result events))))
+    (should (= prompts 1))
+    (should (= (length events) 1))
+    (should (eq (caar events) 'blocked))))
+
+(ert-deftest annas-archive-test-request-no-supported-format-completes-once ()
+  "A widened search with no supported results completes without another prompt."
+  (let ((annas-archive-included-file-types '("pdf"))
+        (annas-archive-supported-file-types '("pdf" "epub"))
+        (annas-archive-retry-with-all-file-types t)
+        (prompts 0) events)
+    (cl-letf (((symbol-function 'annas-archive--url-for-query) #'identity)
+              ((symbol-function 'annas-archive--search)
+               (lambda (_) '((:title "Book" :url "/book" :type "unsupported"))))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _) (cl-incf prompts) t))
+              ((symbol-function 'completing-read)
+               (lambda (&rest _) (ert-fail "Unsupported result reached selection"))))
+      (annas-archive-download "book" (lambda (&rest result) (push result events))))
+    (should (= prompts 1))
+    (should (= (length events) 1))
+    (should (eq (caar events) 'blocked))))
+
+(ert-deftest annas-archive-test-request-message-only-failure-completes-once ()
+  "The manual message-only policy reports failure and ignores late completion."
+  (let ((annas-archive-when-download-fails nil) events)
+    (let ((request (list :finished nil
+                         :callback (lambda (&rest result) (push result events)))))
+      (annas-archive-handle-download-failure "https://example.com/book" request)
+      (annas-archive--finish-request request 'complete "/tmp/late.pdf"))
+    (should (= (length events) 1))
+    (should (eq (caar events) 'failed))
+    (should-not (cadar events))))
+
+(ert-deftest annas-archive-test-request-manual-selection-quit-completes-once ()
+  "Cancelling selection reports one terminal result and still propagates quit."
+  (let ((annas-archive-included-file-types '("pdf")))
+    (let (events quit-seen)
+      (cl-letf (((symbol-function 'annas-archive--url-for-query) #'identity)
+                ((symbol-function 'annas-archive--search)
+                 (lambda (_) '((:title "Book" :url "/book" :type "pdf"))))
+                ((symbol-function 'completing-read)
+                 (lambda (&rest _) (signal 'quit nil)))
+                ((symbol-function 'annas-archive--download-result)
+                 (lambda (&rest _) (ert-fail "Cancelled request downloaded"))))
+        (condition-case nil
+            (annas-archive-download "book" (lambda (&rest result) (push result events)))
+          (quit (setq quit-seen t))))
+      (should quit-seen)
+      (should (= (length events) 1))
+      (should (eq (caar events) 'blocked)))))
+
+(ert-deftest annas-archive-test-headless-browser-route-is-blocked ()
+  "External download does not open a browser for a headless request."
+  (let (result)
+    (cl-letf (((symbol-function 'browse-url-default-browser)
+               (lambda (&rest _) (ert-fail "Browser opened"))))
+      (annas-archive-download-file-externally
+       "https://example.com/paper"
+       (list :noninteractive t :finished nil
+             :callback (lambda (&rest args) (setq result args)))))
+    (should (eq (car result) 'blocked))))
+
+(ert-deftest annas-archive-test-repeated-transport-success-saves-once ()
+  "Duplicate successful delivery must not save an unattached second file."
+  (let ((saves 0) (calls 0)
+        (annas-archive-downloads-dir temporary-file-directory))
+    (let* ((request (list :finished nil :callback (lambda (&rest _) (cl-incf calls))))
+           (callback (annas-archive-download-file-callback
+                      "https://example.com/paper.pdf" request)))
+      (cl-letf (((symbol-function 'annas-archive-save-file)
+                 (lambda (_url path request)
+                   (cl-incf saves)
+                   (annas-archive--finish-request request 'complete path))))
+        (dotimes (_ 2)
+          (with-temp-buffer
+            (insert "%PDF-1.4 fixture")
+            (funcall callback nil))))
+      (should (= calls 1))
+      (should (= saves 1)))))
+
+(ert-deftest annas-archive-test-late-download-error-reports-completion ()
+  "Transport and write failures complete their own requests exactly once."
+  (dolist (failure '(transport write))
+    (let ((calls 0) status)
+      (with-temp-buffer
+        (insert "%PDF-1.4 test")
+        (let ((callback
+               (annas-archive-download-file-callback
+                "https://example.com/paper.pdf"
+                (list :finished nil :noninteractive t
+                      :callback (lambda (result &rest _) (cl-incf calls) (setq status result))))))
+          (cl-letf (((symbol-function 'annas-archive-save-file)
+                     (lambda (&rest _) (error "Cannot write"))))
+            (funcall callback (and (eq failure 'transport) '(:error failed)))
+            (funcall callback '(:error failed))))
+        (should (= calls 1))
+        (should (eq status 'failed))))))

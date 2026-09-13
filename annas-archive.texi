@@ -93,6 +93,8 @@ The development repository is on @uref{https://github.com/benthamite/annas-archi
 
 Anna's Archive does not provide a search-results API@. The package therefore fetches the HTML search route directly with Emacs's URL library, validates the response, renders it with @samp{shr}, and extracts bibliographic metadata (title, file type, size, language, and year). When @code{annas-archive-secret-key} is set, the package first creates an authenticated Anna's Archive session so that eligible members bypass the site's browser check. The session cookie stays in memory and is discarded after the request. The package then presents the results via @code{completing-read}. The request and selection happen in the same command invocation; the package does not open an @samp{eww} buffer or use an external browser for search.
 
+Programmatic calls may supply CALLBACK and NONINTERACTIVE-P to @code{annas-archive-download}. The callback receives STATUS, PATH and ERROR exactly once, including cancellation and failed downloads. STATUS is @code{complete}, @code{external}, @code{blocked} or @code{failed}. Noninteractive requests never prompt or launch a browser; ambiguous results require review. Explicit callbacks replace the legacy post-download hook for that request. Calls without a callback retain the existing hook behavior.
+
 Two download mechanisms are available:
 
 @itemize
